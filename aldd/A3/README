@@ -1,0 +1,21 @@
+UC Santa Cruz extension
+Advanced Linux Device Drivers, Winter 2013
+Assignment #3
+Brad Selbrede, 7 March 2013
+
+Assignment #3 deals with the mmap file ops method and also, to a lesser extent,
+this assignment emphasizes the difference between memory areas allocated by 
+kmalloc and those allocated by vmalloc. 
+
+The tar file includes the source files, a Makefile and a source file for a 
+quick-and-dirty demo program. The following files are also included...
+
+transcript : a file that captures what was typed on the console by the
+leading upto and including several test runs of the demo program.
+
+dmesg.out : a copy of the output from the dmesg program taken shortly after 
+the test runs shown in the transcript. 
+
+README : this file.
+
+
