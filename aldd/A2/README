@@ -1,0 +1,32 @@
+Brad Selbrede                                         18 Feb 2013
+Assignment #2
+Advanced Linux Device Drivers, Winter 2013
+UCSC-extension
+
+The files in this tar ball constitute my work for assignment #2. 
+
+In addition to a simple characteer device driver, there are a pair of user land
+programs. One sets the blink frequency and the other sets the blink pattern. 
+Each of these take a single, integer command line argument. Omitting the 
+argument results in the current value of blink frequency or blink pattern to 
+be returned. 
+
+The make file builds both of these user land programs as well as the kernel
+module. 
+
+Each blink pattern number corresponds to a particular pattern as follows:
+1) blinks the scroll lock LED only
+2) blinks the caps lock LED only
+3) blinks both the scroll lock and caps lock LEDs 
+4) blinks the num lock LED only.
+5) blinks the num lock and the scroll lock LEDs
+6) blinks num lock and caps lock
+7) blinks all three
+8) pattern is a binary counter, scroll lock is the lsb and num lock is the msb
+9) similar to pattern 8 except that the sequence is: 0->4->2->1->3->5->6->7->0
+
+There are also some plain text files that show sample runs.
+The file 'transcript' shows the user console from the test run. The file, 
+'dmesg.txt' is a copy of the output from the dmesg command shortly after
+the test run documented in the transcript file. 
+
