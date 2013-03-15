@@ -1,0 +1,36 @@
+Brad Selbrede    Advanced Linux Device Drivers    Assignment #1
+
+
+This assignment demonstrates implementation of the poll file method. 
+The use of a wait queue, being necessary for the poll method, is also 
+demonstrated. 
+
+The implementation of the device driver is contained in the file, "poll.c". 
+There are also a few test programs. The program testPollRW is only slightly 
+modified from that which was provided. The only modification is to handle the
+error case where the file cannot be opened. The other two programs are simpiler. 
+One simply sits in a loop reading the file and blocking when there is nothing
+to read. The other program writes...and blocks when there is no room to write.
+Multiple intaces of each of these progams can be started in separate processes. 
+On my single processor system, it appears to work as expected (see screen shot
+file named: screen.jpg). 
+
+The character driver, poll.c contemplates multiple processes. The wait event 
+exclusive funstion is used to prevent a thundering heard of processes waking
+up each time the bufferis not empty or not full. However, the test of condition
+(second argument in calls to wait_event_interruptible_exclusive) is not 
+protected and so, there could be a race condition that would lead to a client
+process blocking even after the call to poll had returned indicating that the 
+device was ready to read or write. This could be handled fairly easily by 
+adding two atomic variable, one to indicate that the buffer is empty and one 
+to indicate that the buffer is full. 
+
+| file        | Description
+------------------------------------------------------------------------------
+| poll.c      | the character device driver
+| reader. c   | a simple test program that reads or blocks
+| writer.c    | A siple test program that writes continuously or blocks.
+| screens.jpg | a screen capture of several processes running reader and writer
+| README      | this file
+| transcript.txt | a transcript of a build and insmod session.
+
