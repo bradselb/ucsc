@@ -1,28 +1,11 @@
-/*
- * Realtek RTL8139 PCI Ethernet Card Driver
- *
- * Implement PCI portion of rtl8139 Network Card driver
- * Use this as a template. Add code in areas matching string "CODE HERE".
- * In this phase of the project we will be writing PCI routines.
- * Net Device and ISR routines will be implemented in PHASE 2.
- * Compile the driver as module. Use the makefile provided earlier
- * Unload the production module or blacklist it:
- * # lspci -v  -- This will show any module or driver bound to this card
- * # rmmod 8139too -- Unload the production driver
- * # lsmod - list loaded modules
- * Load the driver after adding required code:
- * # insmod pci.ko
- * Run "ifconfig -a", You should see:
- * - MAC Address read from the device memory
- * - IRQ number read from the device memory
- * - Device IO memory base address read from the device memory
- *
- * Guidelines are provided to assist you with writing the pci portion of the
- * driver. Do not limit yourself to it. You are encouraged to review source
- * code of production driver.
- *
- * I've followed closely the example set by 8139cp.c
- */
+// a basic PCI device driver for a generic
+// Realtek RTL8139 PCI Ethernet Card I bought on Amazon.com for $10
+// 
+// I've closely followed the example set by 8139cp.c
+
+MODULE_AUTHOR("Brad Selbrede");
+MODULE_DESCRIPTION("PCI Driver for Realtek rtl8139 Ethernet card");
+MODULE_LICENSE("GPL v2");
 
 #define DRV_NAME "8139bks"
 #define DRV_VERSION "1.0"
@@ -149,23 +132,6 @@ static struct net_device_stats* rtl8139bks_get_stats(struct net_device* dev)
 }
 
 
-
-
-/***************** PCI *********************/
-/**
-  * 1- Enable the device
-  * 2- Extract the physical address where the device IO memory
-  *    is mapped from the config space
-  * 3- Claim the device IO memory region. It takes start address and
-  *    length of IOMEM region
-  * 4- Remap the device IO Memory region. Routine takes start  and length
-  *    of IOMEM region
-  * 5- Enable DMA processing engine
-  * 6- Allocate net_device structure of type ether
-  * 7- sysfs hooks
-  * 8- save IO memory region address into the device private and
-  *    netdevice struct
-  */
 
 // --------------------------------------------------------------------------
 static int __devinit rtl8139bks_probe(struct pci_dev* pdev, const struct pci_device_id* id)
@@ -362,6 +328,3 @@ static void __exit pci_rtl8139bks_exit(void)
 module_init(pci_rtl8139bks_init);
 module_exit(pci_rtl8139bks_exit);
 
-MODULE_AUTHOR("Brad Selbrede");
-MODULE_DESCRIPTION("PCI Driver for Realtek rtl8139 Ethernet card");
-MODULE_LICENSE("GPL v2");
