@@ -3,9 +3,6 @@
 // 
 // I've closely followed the example set by 8139cp.c
 
-MODULE_AUTHOR("Brad Selbrede");
-MODULE_DESCRIPTION("PCI Driver for Realtek rtl8139 Ethernet card");
-MODULE_LICENSE("GPL v2");
 
 #define DRV_NAME "8139bks"
 #define DRV_VERSION "1.0"
@@ -25,6 +22,9 @@ MODULE_LICENSE("GPL v2");
 
 #include <asm/uaccess.h>
 
+MODULE_AUTHOR("Brad Selbrede");
+MODULE_DESCRIPTION("PCI Driver for Realtek rtl8139 Ethernet card");
+MODULE_LICENSE("GPL v2");
 
 
 // --------------------------------------------------------------------------
