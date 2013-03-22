@@ -1,0 +1,15 @@
+in the first phase of the project, we are to address the basic PCI portion
+of the driver. I have have to admit taking inspiration from the in-tree
+driver, '8139cp.c'. 
+
+This portion was developed and tested on an old Pentium 4 based desktop 
+machine running Debian 6 with my own custom configured and built kernel. 
+It works! (developed, compiled and tested on kernel version 3.0.68)
+
+contents:
+8139bks.c:  my basic PCI driver for a generic PCI ethernet card based 
+            upon the RealTek RTL8139D chip. 
+
+8139regs.c: is not my code at all. it is a handy module that dumps many of
+            the io registers on the rtl8139. 
+
