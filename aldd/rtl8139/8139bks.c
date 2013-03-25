@@ -8,6 +8,8 @@
 #define DRV_VERSION "1.0"
 #define DEV_NAME "bks%d"
 
+
+
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/version.h>
@@ -25,26 +27,34 @@
 #include "8139bks.h" // register definitions
 
 MODULE_AUTHOR("Brad Selbrede");
-MODULE_DESCRIPTION("PCI Driver for Realtek rtl8139 Ethernet card");
+MODULE_DESCRIPTION("Realtek RTL8139 Fast Ethernet controller");
+MODULE_VERSION(DRV_VERSION);
 MODULE_LICENSE("GPL v2");
 
 
 // --------------------------------------------------------------------------
-// one of the old desktop machines that I use for development has a
-// RealTek rtl8100c soldered to the motherboard. This is the primary 
-// ethernet NIC and I want the device driver '8139too' to be bound to
-// that chip so that I can still use eth0. Luckily, the two devices
-// can be differentiated by the subsystem vendor id. The one soldered
-// to the board has subsystem vendor ID == 0x1462 (Micro-Star Int'l).
+// I have two old Pentium-4 based desktop machines that I use for development.
+// One is a dell Dimension 2400 and the other is built around a MSI 7254 (?)
+// motherboard. Each of these has a ethernet controller chip soldered to the 
+// motherboard and each also has been outfitted with a PCI ethernet adapter
+// based upon the RealTek RTL8139D. The Dell machine has a Broadcom chip 
+// soldered to the motherboard and the other machine has a RealTek RTL8100c 
+// soldered to the motherboard. I want the standard driver, 8139too,  to be 
+// loaded for the chip soldered to the motherboard - so I can still use eth0.
+// That is the primary ethernet NIC, I want the device driver '8139too'
+// to be bound to that chip so that I can still use the internet. Obviously, 
+// I also want my driver to work on the 8139 on the PCI card. Luckily, the 
+// two devices can be differentiated by the subsystem vendor id. The rtl8100c
+// soldered to the motherboard has subsystem vendor ID == 0x1462 (Micro-Star Int'l).
 // I've hacked up the sources for the 8139too driver so that it only 
 // supports the 8139 chip with the subsystem vendor id, 0x1462. 
 // My driver will only support the generic Realtek Subsystem VendorID.
-static struct pci_device_id rtl8139bks_table[] __devinitdata = {
+static struct pci_device_id bks_pci_device_ids[] __devinitdata = {
     {0x10ec, 0x8139, 0x10ec, 0x8139, 0, 0, 0 },
     { 0, 0}
 };
 
-MODULE_DEVICE_TABLE(pci, rtl8139bks_table);
+MODULE_DEVICE_TABLE(pci, bks_pci_device_ids);
 
 
 
@@ -63,9 +73,9 @@ MODULE_DEVICE_TABLE(pci, rtl8139bks_table);
 
 // --------------------------------------------------------------------------
 // define private data structure
-struct rtl8139bks_private {
-    struct pci_dev* pdev;
-    struct net_device* ndev;
+struct bks_private {
+    struct pci_dev* pci_dev;
+    struct net_device* net_dev;
 
     void* __iomem ioaddr; // base address of the memory mapped io registers
 
@@ -88,38 +98,38 @@ struct rtl8139bks_private {
 
 // --------------------------------------------------------------------------
 // forward declarations of functions
-static int __devinit rtl8139bks_probe(struct pci_dev* pdev, const struct pci_device_id* id);
-static void __devexit rtl8139bks_remove(struct pci_dev* pdev);
+static int __devinit bks_pci_probe(struct pci_dev* pci_dev, const struct pci_device_id* id);
+static void __devexit bks_pci_remove(struct pci_dev* pci_dev);
 
-static irqreturn_t rtl8139bks_interrupt(int irq, void* dev_id);
+static irqreturn_t bks_interrupt(int irq, void* dev_id);
 
-static int rtl8139bks_open(struct net_device* net_dev);
-static int rtl8139bks_stop(struct net_device* net_dev);
-static int rtl8139bks_start_xmit(struct sk_buff* skb, struct net_device* net_dev);
-static struct net_device_stats* rtl8139bks_get_stats(struct net_device* net_dev);
+static int bks_ndo_open(struct net_device* net_dev);
+static int bks_ndo_close(struct net_device* net_dev);
+static int bks_ndo_hard_start_xmit(struct sk_buff* skb, struct net_device* net_dev);
+static struct net_device_stats* bks_ndo_get_stats(struct net_device* net_dev);
 
 
-static int rtl8139_reset_chip (struct rtl8139bks_private* priv);
-static int rtl8139bks_init_hardware(struct rtl8139bks_private*);
+static int bks_reset_chip (struct bks_private*);
+static int bks_init_hardware(struct bks_private*);
 
 
 // --------------------------------------------------------------------------
-static struct pci_driver rtl8139bks_driver = {
+static struct pci_driver bks_driver = {
     .name = DRV_NAME,
-    .id_table = rtl8139bks_table,
-    .probe = rtl8139bks_probe,
-    .remove = __devexit_p(rtl8139bks_remove),
-    //.suspend  = rtl8139bks_suspend,
-    //.resume   = rtl8139bks_resume,
+    .id_table = bks_pci_device_ids,
+    .probe = bks_pci_probe,
+    .remove = __devexit_p(bks_pci_remove),
+    //.suspend  = bks_pci_suspend,
+    //.resume   = bks_pci_resume,
 };
 
 // --------------------------------------------------------------------------
 #ifdef HAVE_NET_DEVICE_OPS
-static struct net_device_ops rtl8139bks_netdev_ops = {
-    .ndo_open = rtl8139bks_open,
-    .ndo_stop = rtl8139bks_stop,
-    .ndo_get_stats = rtl8139bks_get_stats,
-    .ndo_start_xmit = rtl8139bks_start_xmit
+static struct net_device_ops bks_netdev_ops = {
+    .ndo_open = bks_ndo_open,
+    .ndo_stop = bks_ndo_close,
+    .ndo_get_stats = bks_ndo_get_stats,
+    .ndo_start_xmit = bks_ndo_hard_start_xmit
 };
 #endif
 
@@ -131,21 +141,21 @@ static struct net_device_ops rtl8139bks_netdev_ops = {
 // associated with our device....but we never save those off anywhere.
 // for now, just assume that this device is only associated with ONE
 // physiscal device in the system. It would be better to keep a list. 
-static void* rtl8139bks_interrupt_dev_id = 0;
+static void* bks_interrupt_dev_id = 0;
 
 // --------------------------------------------------------------------------
 // the interrupt service function. 
-irqreturn_t rtl8139bks_interrupt(int irq, void* dev_id)
+irqreturn_t bks_interrupt(int irq, void* dev_id)
 {
     int handled = 0;
     struct net_device* net_dev = (struct net_device*)dev_id;
-    struct rtl8139bks_private* priv = netdev_priv(net_dev);
+    struct bks_private* priv = netdev_priv(net_dev);
     unsigned int intr_stat = 0;
     void* __iomem iobase = priv->ioaddr;
 
-    //printk(KERN_INFO "%s rtl8139bks_interrupt(), irq: %d, dev_id: %p\n", DRV_NAME, irq, dev_id);
+    //printk(KERN_INFO "%s bks_interrupt(), irq: %d, dev_id: %p\n", DRV_NAME, irq, dev_id);
 
-    if (!dev_id || (dev_id != rtl8139bks_interrupt_dev_id) || !priv) {
+    if (!dev_id || (dev_id != bks_interrupt_dev_id) || !priv) {
 		// not ours.
 		goto exit;
 	}
@@ -199,33 +209,33 @@ exit:
 // **************** net device ops ****************************** 
 
 // --------------------------------------------------------------------------
-int rtl8139bks_open(struct net_device* ndev)
+int bks_ndo_open(struct net_device* net_dev)
 {
     int rc = 0;
-    struct rtl8139bks_private* priv = netdev_priv(ndev);
+    struct bks_private* priv = netdev_priv(net_dev);
     //void* __iomem ioaddr = priv->ioaddr;
 
-    printk(KERN_INFO "%s rtl8139bks_open()\n", DRV_NAME);
+    printk(KERN_INFO "%s bks_ndo_open()\n", DRV_NAME);
 
     // register our interrupt handler.
-    rc = request_irq(ndev->irq, rtl8139bks_interrupt, IRQF_SHARED, ndev->name, ndev);
+    rc = request_irq(net_dev->irq, bks_interrupt, IRQF_SHARED, net_dev->name, net_dev);
     if (rc != 0) {
         goto exit; // bail out with this error code.
     }
 
     // HACK. See discussion in comment above interrupt() function.
-    rtl8139bks_interrupt_dev_id = ndev;
+    bks_interrupt_dev_id = net_dev;
 
     // allocate DMA buffers for both receive and transmit
     // void* pci_alloc_consistent(struct pci_dev*, size_t, dma_add_t*);
     // is a convenient wrapper around...
     // void* dma_alloc_coherent(struct device*, size_t, dma_addr_t*, gfp_t);
-    priv->tx_bufs = pci_alloc_consistent(priv->pdev, TX_BUF_TOT_SIZE, &priv->tx_bufs_dma);
+    priv->tx_bufs = pci_alloc_consistent(priv->pci_dev, TX_BUF_TOT_SIZE, &priv->tx_bufs_dma);
     if (!priv->tx_bufs) {
         rc = -ENOMEM;
         goto err_out_free_irq;
     }
-    priv->rx_ring = pci_alloc_consistent(priv->pdev, RX_BUF_TOT_SIZE, &priv->rx_ring_dma);
+    priv->rx_ring = pci_alloc_consistent(priv->pci_dev, RX_BUF_TOT_SIZE, &priv->rx_ring_dma);
     if (!priv->rx_ring) {
         rc = -ENOMEM;
         goto err_out_free_dma;
@@ -246,57 +256,59 @@ int rtl8139bks_open(struct net_device* ndev)
         priv->tx_buf[i] = &priv->tx_bufs[i * TX_BUF_SIZE];
     }
 
-    rtl8139bks_init_hardware(priv);
+    bks_init_hardware(priv);
 
-    netif_start_queue(ndev);
+    netif_start_queue(net_dev);
     rc = 0; // if we get this far all is well.
     goto exit; // successfully.
 
 err_out_free_dma:
     if (priv->rx_ring) {
-        pci_free_consistent(priv->pdev, RX_BUF_TOT_SIZE, priv->rx_ring, priv->rx_ring_dma);
+        pci_free_consistent(priv->pci_dev, RX_BUF_TOT_SIZE, priv->rx_ring, priv->rx_ring_dma);
     }
     if (priv->tx_bufs) {
-        pci_free_consistent(priv->pdev, TX_BUF_TOT_SIZE, priv->tx_bufs, priv->tx_bufs_dma);
+        pci_free_consistent(priv->pci_dev, TX_BUF_TOT_SIZE, priv->tx_bufs, priv->tx_bufs_dma);
     }
 
 err_out_free_irq:
-	free_irq(ndev->irq, ndev);
+	free_irq(net_dev->irq, net_dev);
 
 exit:
     return rc;
 }
 
 // --------------------------------------------------------------------------
-int rtl8139bks_stop(struct net_device* ndev)
+// note that this function gets called 
+int bks_ndo_close(struct net_device* net_dev)
 {
     int rc = 0;
-    struct rtl8139bks_private* priv = netdev_priv(ndev);
+    struct bks_private* priv = netdev_priv(net_dev);
     void* __iomem iobase = priv->ioaddr;
 
-    printk(KERN_INFO "%s rtl8139bks_stop()\n", DRV_NAME);
+    printk(KERN_INFO "%s netop_close()\n", DRV_NAME);
 
     // stop transmission
-    netif_stop_queue(ndev);
+    netif_stop_queue(net_dev);
 
     // command chip to stop DMA transfers
 
-    // disable interrupts
-	iowrite16(0, iobase+IntrMask); // disable interrupts
+    // disable interrupts 
+	iowrite16(0, iobase+IntrMask);
+	ioread16(iobase+IntrMask);
 
     // update statistics
 
     // free dma buffers
     if (priv->rx_ring) {
-        pci_free_consistent(priv->pdev, RX_BUF_TOT_SIZE, priv->rx_ring, priv->rx_ring_dma);
+        pci_free_consistent(priv->pci_dev, RX_BUF_TOT_SIZE, priv->rx_ring, priv->rx_ring_dma);
     }
 
     if (priv->tx_bufs) {
-        pci_free_consistent(priv->pdev, TX_BUF_TOT_SIZE, priv->tx_bufs, priv->tx_bufs_dma);
+        pci_free_consistent(priv->pci_dev, TX_BUF_TOT_SIZE, priv->tx_bufs, priv->tx_bufs_dma);
     }
 
     // free the irq
-	free_irq(ndev->irq, ndev);
+	free_irq(net_dev->irq, net_dev);
 
     // re-set transmit accounting.
     priv->tx_cur = 0;
@@ -307,21 +319,21 @@ int rtl8139bks_stop(struct net_device* ndev)
 }
 
 // --------------------------------------------------------------------------
-int rtl8139bks_start_xmit(struct sk_buff* skb, struct net_device* dev)
+int bks_ndo_hard_start_xmit(struct sk_buff* skb, struct net_device* dev)
 {
-    //printk(KERN_INFO "%s rtl8139bks_start_xmit()\n", DRV_NAME);
+    //printk(KERN_INFO "%s net_start_xmit()\n", DRV_NAME);
     dev_kfree_skb(skb); // Just free it for now
 
     return 0;
 }
 
 // --------------------------------------------------------------------------
-struct net_device_stats* rtl8139bks_get_stats(struct net_device* dev)
+struct net_device_stats* bks_ndo_get_stats(struct net_device* dev)
 {
     struct net_device_stats* stats = 0;
-    struct rtl8139bks_private* priv = 0;
+    struct bks_private* priv = 0;
 
-    //printk(KERN_INFO "%s rtl8139bks_get_stats()\n", DRV_NAME);
+    //printk(KERN_INFO "%s net_get_stats()\n", DRV_NAME);
     
 	priv = netdev_priv(dev);
     stats = &priv->stats;
@@ -331,7 +343,7 @@ struct net_device_stats* rtl8139bks_get_stats(struct net_device* dev)
 
 // ************************ private functions ****************************
 // --------------------------------------------------------------------------
-static int rtl8139_reset_chip (struct rtl8139bks_private* priv)
+static int bks_reset_chip (struct bks_private* priv)
 {
 	int rc = 1;
    void* __iomem iobase = priv->ioaddr;
@@ -354,7 +366,7 @@ static int rtl8139_reset_chip (struct rtl8139bks_private* priv)
 
 
 // --------------------------------------------------------------------------
-static int rtl8139bks_init_hardware(struct rtl8139bks_private* priv)
+static int bks_init_hardware(struct bks_private* priv)
 {
     int rc = 0;
 	unsigned int regval = 0;
@@ -363,9 +375,9 @@ static int rtl8139bks_init_hardware(struct rtl8139bks_private* priv)
 
 	void* __iomem iobase = priv->ioaddr;
 
-    printk(KERN_INFO "%s rtl8139bks_init_hardware()\n", DRV_NAME);
+    printk(KERN_INFO "%s init_hardware()\n", DRV_NAME);
 
-    if (0 != rtl8139_reset_chip(priv)) {
+    if (0 != bks_reset_chip(priv)) {
 		printk(KERN_WARNING "%s timedout waiting for reset to complete\n", DRV_NAME);
 	}
 
@@ -434,60 +446,61 @@ static int rtl8139bks_init_hardware(struct rtl8139bks_private* priv)
 
 // **************** PCI device ****************************** 
 // --------------------------------------------------------------------------
-int __devinit rtl8139bks_probe(struct pci_dev* pdev, const struct pci_device_id* id)
+int __devinit bks_pci_probe(struct pci_dev* pci_dev, const struct pci_device_id* id)
 {
     int rc = 0;
-    struct net_device* ndev;
-    struct rtl8139bks_private* priv;
+    struct net_device* net_dev;
+    struct bks_private* priv = 0;
     unsigned long pio_start, pio_end, pio_len, pio_flags;
     unsigned long mmio_start, mmio_end, mmio_len, mmio_flags;
     void* __iomem ioaddr;
 
+    printk(KERN_INFO "%s pci_probe()\n", DRV_NAME);
     
     // allocate an ethernet device.
     // this also allocates space for the private data and initializes it to zeros. 
-    ndev = alloc_etherdev(sizeof(struct rtl8139bks_private));
-    if (!ndev) {
+    net_dev = alloc_etherdev(sizeof(struct bks_private));
+    if (!net_dev) {
         rc = -ENOMEM;
         goto out;
     }
-    SET_NETDEV_DEV(ndev, &pdev->dev);
+    SET_NETDEV_DEV(net_dev, &pci_dev->dev);
     // initialize some fields in the net device. 
-    memcpy(&ndev->name[0], DEV_NAME, sizeof DEV_NAME);
-    ndev->irq = pdev->irq;
-    ndev->hard_header_len = 14;
+    memcpy(&net_dev->name[0], DEV_NAME, sizeof DEV_NAME);
+    net_dev->irq = pci_dev->irq;
+    net_dev->hard_header_len = 14;
 
     // initialize some fields in the private data
-    priv = netdev_priv(ndev);
-    priv->pdev = pdev;
-    priv->ndev = ndev;
+    priv = netdev_priv(net_dev);
+    priv->pci_dev = pci_dev;
+    priv->net_dev = net_dev;
     spin_lock_init(&priv->lock);
 
     // enable the pci device
-    rc = pci_enable_device(pdev);
+    rc = pci_enable_device(pci_dev);
     if (rc) {
         goto err_out_free_netdev;
     }
 
     // keep a hook to the private stuff in the pci_device too. 
-    pci_set_drvdata(pdev, priv);
+    pci_set_drvdata(pci_dev, priv);
 
     // enable bus master
-    pci_set_master(pdev);
+    pci_set_master(pci_dev);
 
     // find out where the io regions are.
-    pio_start = pci_resource_start (pdev, 0);
-    pio_end = pci_resource_end (pdev, 0);
-    pio_len = pci_resource_len (pdev, 0);
-    pio_flags = pci_resource_flags (pdev, 0);
-    printk(KERN_INFO "%s io region 0 start: 0x%04lx, end: 0x%04lx, length: 0x%lx, flags: 0x%08lx\n", 
+    pio_start = pci_resource_start (pci_dev, 0);
+    pio_end = pci_resource_end (pci_dev, 0);
+    pio_len = pci_resource_len (pci_dev, 0);
+    pio_flags = pci_resource_flags (pci_dev, 0);
+    printk(KERN_INFO "%s io region 0 start: 0x%08lx, end: 0x%08lx, length: 0x%lx, flags: 0x%08lx\n", 
                       DRV_NAME, pio_start, pio_end, pio_len, pio_flags);
 
-    mmio_start = pci_resource_start (pdev, 1);
-    mmio_end = pci_resource_end (pdev, 1);
-    mmio_len = pci_resource_len (pdev, 1);
-    mmio_flags = pci_resource_flags (pdev, 1);
-    printk(KERN_INFO "%s io region 1 start: 0x%04lx, end: 0x%04lx, length: 0x%lx, flags: 0x%08lx\n", 
+    mmio_start = pci_resource_start (pci_dev, 1);
+    mmio_end = pci_resource_end (pci_dev, 1);
+    mmio_len = pci_resource_len (pci_dev, 1);
+    mmio_flags = pci_resource_flags (pci_dev, 1);
+    printk(KERN_INFO "%s io region 1 start: 0x%08lx, end: 0x%08lx, length: 0x%lx, flags: 0x%08lx\n", 
                       DRV_NAME, mmio_start, mmio_end, mmio_len, mmio_flags);
 
 
@@ -500,47 +513,47 @@ int __devinit rtl8139bks_probe(struct pci_dev* pdev, const struct pci_device_id*
 
 
     // take ownership of all the io regions (in this case there are only two)
-    rc = pci_request_regions(pdev, DRV_NAME);
+    rc = pci_request_regions(pci_dev, DRV_NAME);
     if (rc) {
         goto err_out_clear_master;
     }
 
     // ask kernel to setup page tables for the mmio region.
-    ioaddr = pci_iomap(pdev, 1, 0);
+    ioaddr = pci_iomap(pci_dev, 1, 0);
     if (!ioaddr) {
         rc = -EIO;
         goto err_out_release_regions;
     }
 
     // save off the base address of the io registers
-    ndev->base_addr = (long)ioaddr;
+    net_dev->base_addr = (long)ioaddr;
     priv->ioaddr = ioaddr;
 
     // configure 32bit DMA.
-    rc = pci_set_dma_mask(pdev, DMA_BIT_MASK(32));
+    rc = pci_set_dma_mask(pci_dev, DMA_BIT_MASK(32));
     if (rc) {
         goto err_out_iounmap;
     }
 
-//  rc = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32));
+//  rc = pci_set_consistent_dma_mask(pci_dev, DMA_BIT_MASK(32));
 //  if (rc) {
 //      goto err_out_iounmap;
 //  }
 
-    memset(&ndev->broadcast[0], 255, 6);
+    memset(&net_dev->broadcast[0], 255, 6);
 	// copy the six byte ethernet address from the io memory to the net_device structure.
-    memcpy_fromio(&ndev->dev_addr[0], (ioaddr+EthernetAddr), 6);
+    memcpy_fromio(&net_dev->dev_addr[0], (ioaddr+EthernetAddr), 6);
 
 #ifdef HAVE_NET_DEVICE_OPS
-    ndev->netdev_ops = &rtl8139bks_netdev_ops;
+    net_dev->netdev_ops = &bks_netdev_ops;
 #else
-    ndev->open = rtl8139bks_open;
-    ndev->stop = rtl8139bks_stop;
-    ndev->hard_start_xmit = rtl8139bks_start_xmit;
-    ndev->get_stats = rtl8139bks_get_stats;
+    net_dev->open = bks_ndo_open;
+    net_dev->stop = bks_ndo_close;
+    net_dev->hard_start_xmit = bks_ndo_hard_start_xmit;
+    net_dev->get_stats = bks_ndo_get_stats;
 #endif
 
-    rc = register_netdev(ndev);
+    rc = register_netdev(net_dev);
     if (rc) {
         goto err_out_iounmap;
     }
@@ -549,83 +562,89 @@ int __devinit rtl8139bks_probe(struct pci_dev* pdev, const struct pci_device_id*
     goto out;
 
 err_out_iounmap:
-    pci_iounmap(pdev, ioaddr);
+    pci_iounmap(pci_dev, ioaddr);
 
 err_out_release_regions:
-    pci_release_regions(pdev);
+    pci_release_regions(pci_dev);
 
 //err_out_mwi:
-//  pci_clear_mwi(pdev);
+//  pci_clear_mwi(pci_dev);
 
 err_out_clear_master:
-    pci_clear_master(pdev);
+    pci_clear_master(pci_dev);
 
 //err_out_disable:
-    pci_disable_device(pdev);
+    pci_disable_device(pci_dev);
 
 err_out_free_netdev:
-    free_netdev(ndev);
+    free_netdev(net_dev);
 
 out:
     return rc;
 }
 
 // --------------------------------------------------------------------------
-//
 // Get address of netdevice, device private structures and ioaddr
 // Unregister and free netdevice
 // Unmap the device MMIO region. Also set: priv->mmio_addr = NULL
 // Release the ownership of IO memory region
-// call: pci_set_drvdata(pdev, NULL)
+// call: pci_set_drvdata(pci_dev, NULL)
 // Disable PCI device
-void __devexit rtl8139bks_remove(struct pci_dev* pdev)
+void __devexit bks_pci_remove(struct pci_dev* pci_dev)
 {
-    struct net_device* ndev = 0;
-    struct rtl8139bks_private* priv = 0;
+    struct net_device* net_dev = 0;
+    struct bks_private* priv = 0;
     void* __iomem ioaddr = 0;
 
-    printk(KERN_INFO "%s rtl8139bks_remove()\n", DRV_NAME);
+    printk(KERN_INFO "%s pci_remove()\n", DRV_NAME);
 
-    priv = (struct rtl8139bks_private*)pci_get_drvdata(pdev);
+    priv = (struct bks_private*)pci_get_drvdata(pci_dev);
     if (priv) {
-        ndev = priv->ndev;
+        net_dev = priv->net_dev;
         ioaddr = priv->ioaddr;
-        pci_iounmap(pdev, ioaddr);
+
+		if (net_dev) {
+			// this will cause bks_ndo_close() to be called. 
+			unregister_netdev(net_dev);
+		}
+
+		// disable interrupts
+		//iowrite16(0, ioaddr+IntrMask);
+		//ioread16(ioaddr+IntrMask);
+        
+		pci_iounmap(pci_dev, ioaddr);
         priv->ioaddr = 0; // prophy.
     }
-        
-    if (ndev) {
-        unregister_netdev(ndev);
+
+    pci_release_regions(pci_dev);
+    pci_clear_master(pci_dev);
+    pci_set_drvdata(pci_dev,0);
+    pci_disable_device(pci_dev);
+
+    if (net_dev) {
+        free_netdev(net_dev);
     }
 
-    pci_release_regions(pdev);
-    pci_clear_master(pdev);
-    pci_set_drvdata(pdev,0);
-    pci_disable_device(pdev);
-
-    if (ndev) {
-        free_netdev(ndev);
-    }
 }
 
 
 // **************** basic driver ******************************
 // --------------------------------------------------------------------------
-int __init pci_rtl8139bks_init(void)
+int __init bks_mod_init(void)
 {
     int rc = 0;
-    printk(KERN_INFO "%s rtl8139bks_init()\n", DRV_NAME);
-    rc = pci_register_driver(&rtl8139bks_driver);
+    printk(KERN_INFO "%s mod_init()\n", DRV_NAME);
+    rc = pci_register_driver(&bks_driver);
     return rc;
 }
 
 // --------------------------------------------------------------------------
-void __exit pci_rtl8139bks_exit(void)
+void __exit bks_mod_exit(void)
 {
-    printk(KERN_INFO "%s rtl8139bks_exit()\n", DRV_NAME);
-    pci_unregister_driver(&rtl8139bks_driver);
+    printk(KERN_INFO "%s mod_exit()\n", DRV_NAME);
+    pci_unregister_driver(&bks_driver);
 }
 
-module_init(pci_rtl8139bks_init);
-module_exit(pci_rtl8139bks_exit);
+module_init(bks_mod_init);
+module_exit(bks_mod_exit);
 
