@@ -79,14 +79,14 @@ struct bks_private {
 
     void* __iomem ioaddr; // base address of the memory mapped io registers
 
-    unsigned int tx_cur; // which one of the Tx buffers is currently in use.
-    unsigned int tx_dirty; // ?? 
+    unsigned int cur_tx; // index of the next available Tx buffer.
+    unsigned int dirty_tx; // index of the 
     unsigned char* tx_buf[NR_OF_TX_DESCRIPTORS]; // an array of pointers. each one points to the start of a Tx Buffer.
     unsigned char* tx_bufs; // points to a contiguous region large enough for four Tx buffers.
     dma_addr_t tx_bufs_dma;
 
     void* rx_ring;
-    unsigned int rx_cur;
+    unsigned int cur_rx;
     dma_addr_t rx_ring_dma;
 	unsigned int rx_config;
 
@@ -111,6 +111,7 @@ static struct net_device_stats* bks_ndo_get_stats(struct net_device* net_dev);
 
 static int bks_reset_chip (struct bks_private*);
 static int bks_init_hardware(struct bks_private*);
+static int bks_stop_hardware(struct bks_private*);
 
 
 // --------------------------------------------------------------------------
@@ -249,9 +250,9 @@ int bks_ndo_open(struct net_device* net_dev)
 
     // initialize all of the rest of the private data
     // esecially the buffer accounting.
-    priv->rx_cur = 0;
-    priv->tx_cur = 0;
-    priv->tx_dirty = 0;
+    priv->cur_rx = 0;
+    priv->cur_tx = 0;
+    priv->dirty_tx = 0;
     for (int i=0; i<NR_OF_TX_DESCRIPTORS; ++i) {
         priv->tx_buf[i] = &priv->tx_bufs[i * TX_BUF_SIZE];
     }
@@ -278,7 +279,7 @@ exit:
 }
 
 // --------------------------------------------------------------------------
-// note that this function gets called 
+// 
 int bks_ndo_close(struct net_device* net_dev)
 {
     int rc = 0;
@@ -290,11 +291,7 @@ int bks_ndo_close(struct net_device* net_dev)
     // stop transmission
     netif_stop_queue(net_dev);
 
-    // command chip to stop DMA transfers
-
-    // disable interrupts 
-	iowrite16(0, iobase+IntrMask);
-	ioread16(iobase+IntrMask);
+	bks_stop_hardware(priv);
 
     // update statistics
 
@@ -307,12 +304,15 @@ int bks_ndo_close(struct net_device* net_dev)
         pci_free_consistent(priv->pci_dev, TX_BUF_TOT_SIZE, priv->tx_bufs, priv->tx_bufs_dma);
     }
 
+    bks_interrupt_dev_id = 0;
+
     // free the irq
 	free_irq(net_dev->irq, net_dev);
 
+
     // re-set transmit accounting.
-    priv->tx_cur = 0;
-    priv->tx_dirty = 0;
+    priv->cur_tx = 0;
+    priv->dirty_tx = 0;
 
 
     return rc;
@@ -390,7 +390,7 @@ static int bks_init_hardware(struct bks_private* priv)
 	iowrite32(priv->rx_ring_dma, iobase+RxBufStartAddr);
 	ioread32(iobase+RxBufStartAddr); // flush it? 
 
-	// tell the chip to enable receive and transmit.
+	// command the chip to enable receive and transmit.
 	regval = ioread8(iobase+ChipCmd);
 	regval = regval | CmdTxEnable | CmdRxEnable;
 	iowrite8(regval, iobase+ChipCmd);
@@ -442,6 +442,25 @@ static int bks_init_hardware(struct bks_private* priv)
 }
 
 
+// --------------------------------------------------------------------------
+// undo what was done in init_hardware() 
+static int bks_stop_hardware(struct bks_private* priv)
+{
+	int rc = 0;
+	void* __iomem iobase = priv->ioaddr;
+	unsigned int regval = 0;
+
+    // disable all interrupts 
+	iowrite16(0, iobase+IntrMask);
+	ioread16(iobase+IntrMask);
+	
+    // command chip to disable receive and transmit
+	regval = ioread8(iobase+ChipCmd);
+	regval = regval & ~(CmdTxEnable | CmdRxEnable);
+	iowrite8(regval, iobase+ChipCmd);
+
+	return rc;
+}
 
 
 // **************** PCI device ****************************** 
