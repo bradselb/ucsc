@@ -66,10 +66,10 @@ struct rtl8139bks_private {
 
     void* __iomem ioaddr; // base address of the memory mapped io registers
 
-    unsigned int tx_cur; // an index into the tx buffer. reflects current position in the buffer? or which bufer?
+    unsigned int tx_cur; // which one of the Tx buffers is currently in use.
     unsigned int tx_dirty; // ?? 
-    unsigned char* tx_buf[NR_OF_TX_DESCRIPTORS]; // an array of dynamically allocated buffers.
-    unsigned char* tx_bufs;
+    unsigned char* tx_buf[NR_OF_TX_DESCRIPTORS]; // an array of pointers. each one points to the start of a Tx Buffer.
+    unsigned char* tx_bufs; // points to a contiguous region large enough for four Tx buffers.
     dma_addr_t tx_bufs_dma;
 
     void* rx_ring;
@@ -138,25 +138,49 @@ irqreturn_t rtl8139bks_interrupt(int irq, void* dev_id)
     unsigned int intr_stat = 0;
     void* __iomem iobase = priv->ioaddr;
 
-    printk(KERN_INFO "%s rtl8139bks_interrupt(), irq: %d, dev_id: %p\n", DRV_NAME, irq, dev_id);
+    //printk(KERN_INFO "%s rtl8139bks_interrupt(), irq: %d, dev_id: %p\n", DRV_NAME, irq, dev_id);
 
-    if (dev_id && (dev_id == rtl8139bks_interrupt_dev_id) && priv) {
-        // read the interrupt status register
-        
-        spin_lock(&priv->lock);
-        intr_stat = ioread16(iobase + IntrStatus);
-        spin_unlock(&priv->lock);
+    if (!dev_id || (dev_id != rtl8139bks_interrupt_dev_id) || !priv) {
+		// not ours.
+		goto exit;
+	}
+	// read the interrupt status register
+	spin_lock(&priv->lock);
+	intr_stat = ioread16(iobase + IntrStatus);
+	spin_unlock(&priv->lock);
 
-        // use status to determine reason for interrupt.
+	// use status to determine reason for interrupt.
+	if (0 == (intr_stat & 0x0e07f)) {
+		// spurious interrrupt? 
+		goto exit;
+	}
+	
+	if (intr_stat & TimerTimedOut) {
+		// the timer timed out
+		spin_lock(&priv->lock);
+		iowrite16((intr_stat & ~TimerTimedOut), iobase+IntrMask); // disable the timer interrupt!
+		ioread16(iobase+IntrMask); // make sure.
+		iowrite32(0, iobase+TimerCount); // reset the counter!
+		iowrite32(0, iobase+TimerInterval); // reset timer timeout to zero.
+		ioread32(iobase+TimerInterval);
+		spin_unlock(&priv->lock);
+		printk(KERN_INFO "%s timer timed out.\n", DRV_NAME);
+	}
+	
+	if (intr_stat & (RxOK | RxBufferOverflow | RxFifoOverflow)) {
+		// deal with received packet.
+	}
 
-        printk(KERN_INFO "%s interrupt status: 0x%04x\n", DRV_NAME, intr_stat);
-        
-        handled = 1;
+	if (intr_stat & (TxOK | TxError)) {
+		// deal with transmission.
+	}
 
-    } else {
-        handled = 0;
-    }
+       
+	printk(KERN_INFO "%s interrupt status: 0x%04x\n", DRV_NAME, intr_stat);
+	handled = 1;
 
+
+exit:
     return IRQ_RETVAL(handled);
 }
 
@@ -232,7 +256,7 @@ int rtl8139bks_stop(struct net_device* ndev)
 {
     int rc = 0;
     struct rtl8139bks_private* priv = netdev_priv(ndev);
-    //void* __iomem ioaddr = priv->ioaddr;
+    void* __iomem iobase = priv->ioaddr;
 
     printk(KERN_INFO "%s rtl8139bks_stop()\n", DRV_NAME);
 
@@ -242,6 +266,7 @@ int rtl8139bks_stop(struct net_device* ndev)
     // command chip to stop DMA transfers
 
     // disable interrupts
+	iowrite16(0, iobase+IntrMask); // disable interrupts
 
     // update statistics
 
@@ -268,8 +293,8 @@ int rtl8139bks_stop(struct net_device* ndev)
 // --------------------------------------------------------------------------
 int rtl8139bks_start_xmit(struct sk_buff* skb, struct net_device* dev)
 {
-    printk(KERN_INFO "%s rtl8139bks_start_xmit()\n", DRV_NAME);
-    dev_kfree_skb(skb); /* Just free it for now */
+    //printk(KERN_INFO "%s rtl8139bks_start_xmit()\n", DRV_NAME);
+    dev_kfree_skb(skb); // Just free it for now
 
     return 0;
 }
@@ -279,8 +304,10 @@ struct net_device_stats* rtl8139bks_get_stats(struct net_device* dev)
 {
     struct net_device_stats* stats = 0;
     struct rtl8139bks_private* priv = 0;
-    printk(KERN_INFO "%s rtl8139bks_get_stats()\n", DRV_NAME);
-    priv = netdev_priv(dev);
+
+    //printk(KERN_INFO "%s rtl8139bks_get_stats()\n", DRV_NAME);
+    
+	priv = netdev_priv(dev);
     stats = &priv->stats;
 
     return stats;
@@ -288,9 +315,10 @@ struct net_device_stats* rtl8139bks_get_stats(struct net_device* dev)
 
 // ************************ private functions ****************************
 // --------------------------------------------------------------------------
-static void rtl8139_reset_chip (struct rtl8139bks_private* priv)
+static int rtl8139_reset_chip (struct rtl8139bks_private* priv)
 {
-    void* __iomem iobase = priv->ioaddr;
+	int rc = 1;
+   void* __iomem iobase = priv->ioaddr;
 
 	// command a soft reset
     iowrite8(CmdSoftReset, iobase + ChipCmd);
@@ -298,9 +326,13 @@ static void rtl8139_reset_chip (struct rtl8139bks_private* priv)
     // wait here until the chip says it has completed the reset
 	for (int i = 1000; 0 < i; --i) {
 		barrier();
-		if (0 == (ioread8(iobase + ChipCmd) & CmdSoftReset)) break;
+		if (0 == (ioread8(iobase + ChipCmd) & CmdSoftReset)) {
+			rc = 0; // success.
+			break;
+		}
 		udelay(10);
 	}
+	return rc;
 }
 
 
@@ -309,8 +341,35 @@ static void rtl8139_reset_chip (struct rtl8139bks_private* priv)
 static int rtl8139bks_init_hardware(struct rtl8139bks_private* priv)
 {
     int rc = 0;
+	unsigned int regval = 0;
+	unsigned int hw_version_id = 0;
+	unsigned long flags;
+
+	void* __iomem iobase = priv->ioaddr;
+
+    printk(KERN_INFO "%s rtl8139bks_init_hardware()\n", DRV_NAME);
 
     rtl8139_reset_chip(priv);
+
+	regval = ioread32(iobase + TxConfig);
+	hw_version_id = ((regval & 0x7c000000)>>24) | ((regval & 0x00c00000)>>22);
+	printk(KERN_INFO "%s HW Version Id: 0x%02x\n", DRV_NAME, hw_version_id);
+
+	regval = ioread8(iobase + MediaStatus);
+	printk(KERN_INFO "%s Media Status: 0x%02x\n", DRV_NAME, regval);
+	//printk(KERN_INFO "%s \n", DRV_NAME);
+
+	spin_lock_irqsave(&priv->lock, flags);
+
+	iowrite16(0, iobase+IntrMask); // disable interrupts
+	regval = ioread16(iobase+IntrMask);
+	iowrite32(0, iobase+TimerCount);
+	iowrite32(0x7fffffff, iobase+TimerInterval);
+	iowrite16(TimerTimedOut, iobase+IntrMask); // enable timer interrupt.
+	regval = ioread16(iobase+IntrMask);
+	iowrite32(0, iobase+TimerCount);
+
+	spin_unlock_irqrestore(&priv->lock, flags);
 
     return rc;
 }
