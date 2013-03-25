@@ -6,11 +6,11 @@
 // once again, I have taken considerable inspiration from 
 // the production drivers, 8139too.c and 8139cp.c
 enum RegisterNames {
-    MacAddr = 0, // start of 6 byte mac address
+    EthernetAddr = 0, // start of 6 byte hw address
     MultiCastAddr = 0x0008, // there are eight bytes register, must be written 32 bits at a time.
     TxStatus0 = 0x0010, // four 32 bit registers. (aka Tx Status of Descriptor 0)
     TxAddr0 = 0x0020, // four 32 bit registers. Each holds the start address of the respective Tx buffer.
-    RxBuf = 0x0030, // receive buffer start address register.
+    RxBufStartAddr = 0x0030, // receive buffer start address register.
     ChipCmd = 0x0037, // command register
     RxBufPtr = 0x0038, // the present position in the rx buffer? 
     RxByteCount = 0x003A, // others call is RxBufAddr...but data sheet says it is a byte count?
@@ -57,7 +57,7 @@ enum InterruptStatusBits {
 	TxOK = (1<<2),
 	TxError = (1<<3),
 	RxBufferOverflow = (1<<4),
-	PacketUnderrunLinkChange = (1<<5),
+	PacketUnderRunLinkChange = (1<<5),
 	RxFifoOverflow = (1<<6),
 	// bits [7..12] reserved
 	CableLengthChange = (1<<13),

@@ -49,10 +49,13 @@ MODULE_DEVICE_TABLE(pci, rtl8139bks_table);
 
 
 // --------------------------------------------------------------------------
-// the datasheet is a little sketchy on the necessary receive buffer size
-// make it big enough that we need not worry about it too much. 
-#define RX_BUF_SIZE (65536)
-#define RX_BUF_TOT_SIZE (65536)
+// Receive buffer is 32KB but, in some instances, the device can write past
+// the advertised end of buffer when we say it is OK to do so.
+#define RX_BUF_SIZE  (4094 << 3)
+#define RX_BUF_STATUS_SIZE (16)
+#define RX_BUF_NOWRAP_SIZE (2048)
+#define RX_BUF_TOT_SIZE  (RX_BUF_SIZE + RX_BUF_STATUS_SIZE + RX_BUF_NOWRAP_SIZE)
+
 #define NR_OF_TX_DESCRIPTORS (4)
 #define MAX_ETH_FRAME_SIZE	1536
 #define TX_BUF_SIZE	MAX_ETH_FRAME_SIZE
@@ -75,6 +78,7 @@ struct rtl8139bks_private {
     void* rx_ring;
     unsigned int rx_cur;
     dma_addr_t rx_ring_dma;
+	unsigned int rx_config;
 
     struct net_device_stats stats;
 
@@ -95,6 +99,7 @@ static int rtl8139bks_start_xmit(struct sk_buff* skb, struct net_device* net_dev
 static struct net_device_stats* rtl8139bks_get_stats(struct net_device* net_dev);
 
 
+static int rtl8139_reset_chip (struct rtl8139bks_private* priv);
 static int rtl8139bks_init_hardware(struct rtl8139bks_private*);
 
 
@@ -157,14 +162,20 @@ irqreturn_t rtl8139bks_interrupt(int irq, void* dev_id)
 	
 	if (intr_stat & TimerTimedOut) {
 		// the timer timed out
+		unsigned int ack = intr_stat & ~TimerTimedOut;
+		unsigned int status = 0;
 		spin_lock(&priv->lock);
-		iowrite16((intr_stat & ~TimerTimedOut), iobase+IntrMask); // disable the timer interrupt!
+		iowrite16(ack, iobase+IntrMask); // disable the timer interrupt!
 		ioread16(iobase+IntrMask); // make sure.
-		iowrite32(0, iobase+TimerCount); // reset the counter!
-		iowrite32(0, iobase+TimerInterval); // reset timer timeout to zero.
+		iowrite16(ack, iobase+IntrStatus); // disable the timer interrupt!
+		status = ioread16(iobase+IntrStatus); // make sure.
+		iowrite32(0, iobase+TimerInterval); // do not timeout anymore.
 		ioread32(iobase+TimerInterval);
+		iowrite32(0, iobase+TimerCount); // reset the counter
+		ioread32(iobase+TimerCount);
 		spin_unlock(&priv->lock);
-		printk(KERN_INFO "%s timer timed out.\n", DRV_NAME);
+	    printk(KERN_INFO "%s interrupt status: 0x%04x, second read: 0x%04x\n", DRV_NAME, intr_stat, status);
+		//printk(KERN_INFO "%s timer timed out.\n", DRV_NAME);
 	}
 	
 	if (intr_stat & (RxOK | RxBufferOverflow | RxFifoOverflow)) {
@@ -176,7 +187,6 @@ irqreturn_t rtl8139bks_interrupt(int irq, void* dev_id)
 	}
 
        
-	printk(KERN_INFO "%s interrupt status: 0x%04x\n", DRV_NAME, intr_stat);
 	handled = 1;
 
 
@@ -220,6 +230,12 @@ int rtl8139bks_open(struct net_device* ndev)
         rc = -ENOMEM;
         goto err_out_free_dma;
     }
+
+
+	// nowrap, accept packets that match my hw address, accept broadcast, 
+	// no rx thresh, rx buf len = 32k+16max rx dma burst 1024, 
+	priv->rx_config = 0x0000f68a; 
+
 
     // initialize all of the rest of the private data
     // esecially the buffer accounting.
@@ -342,34 +358,73 @@ static int rtl8139bks_init_hardware(struct rtl8139bks_private* priv)
 {
     int rc = 0;
 	unsigned int regval = 0;
+	unsigned int reserved;
 	unsigned int hw_version_id = 0;
-	unsigned long flags;
 
 	void* __iomem iobase = priv->ioaddr;
 
     printk(KERN_INFO "%s rtl8139bks_init_hardware()\n", DRV_NAME);
 
-    rtl8139_reset_chip(priv);
+    if (0 != rtl8139_reset_chip(priv)) {
+		printk(KERN_WARNING "%s timedout waiting for reset to complete\n", DRV_NAME);
+	}
 
-	regval = ioread32(iobase + TxConfig);
-	hw_version_id = ((regval & 0x7c000000)>>24) | ((regval & 0x00c00000)>>22);
-	printk(KERN_INFO "%s HW Version Id: 0x%02x\n", DRV_NAME, hw_version_id);
-
+	// read and report the media status
 	regval = ioread8(iobase + MediaStatus);
 	printk(KERN_INFO "%s Media Status: 0x%02x\n", DRV_NAME, regval);
 	//printk(KERN_INFO "%s \n", DRV_NAME);
 
-	spin_lock_irqsave(&priv->lock, flags);
+	// tell the device the bus address of our receive buffer. 
+	iowrite32(priv->rx_ring_dma, iobase+RxBufStartAddr);
+	ioread32(iobase+RxBufStartAddr); // flush it? 
 
-	iowrite16(0, iobase+IntrMask); // disable interrupts
-	regval = ioread16(iobase+IntrMask);
-	iowrite32(0, iobase+TimerCount);
-	iowrite32(0x7fffffff, iobase+TimerInterval);
-	iowrite16(TimerTimedOut, iobase+IntrMask); // enable timer interrupt.
-	regval = ioread16(iobase+IntrMask);
-	iowrite32(0, iobase+TimerCount);
+	// tell the chip to enable receive and transmit.
+	regval = ioread8(iobase+ChipCmd);
+	regval = regval | CmdTxEnable | CmdRxEnable;
+	iowrite8(regval, iobase+ChipCmd);
 
-	spin_unlock_irqrestore(&priv->lock, flags);
+	// set the receive config
+	regval = ioread32(iobase+RxConfig);
+	reserved = 0xf0fc0040; // these bits are marked reserved on the data sheet.
+	regval = regval & reserved; // preserve the reserved bits
+	regval = regval | priv->rx_config;
+	iowrite32(regval, iobase+RxConfig);
+	regval = ioread32(iobase+RxConfig);
+	printk(KERN_INFO "%s Rx Config: 0x%08x\n", DRV_NAME, regval);
+
+	// discover the HW version Id
+	regval = ioread32(iobase + TxConfig);
+	hw_version_id = ((regval & 0x7c000000)>>24) | ((regval & 0x00c00000)>>22);
+	printk(KERN_INFO "%s HW Version Id: 0x%02x\n", DRV_NAME, hw_version_id);
+	// and set the Tx config.
+	regval = regval | (3<<24) | (3<<9);
+	regval = regval & ~((3<<17) | (1<<8) | (0x0f<<4)); // clear bits 4,5,6,7,8,17 and 18.
+	iowrite32(regval, iobase+TxConfig);
+	regval = ioread32(iobase + TxConfig);
+	printk(KERN_INFO "%s Tx Config: 0x%08x\n", DRV_NAME, regval);
+
+
+	// set the physical address of each of the TX buffers
+	for (int i=0; i<NR_OF_TX_DESCRIPTORS; ++i) {
+		unsigned int offset;
+		offset = priv->tx_buf[i] - priv->tx_bufs; // offset of this tx buf relative to start 
+		iowrite32(priv->tx_bufs_dma + offset, iobase + TxAddr0 + 4*i);
+		ioread32(iobase + TxAddr0 + 4*i); // flush ? 
+	}
+
+	// reset the missed packet counter.
+	iowrite32(0, iobase+RxMissedCount);
+	iowrite32(0, iobase+TimerCount);
+	iowrite32(0, iobase+TimerInterval);
+
+	regval = ioread16(iobase+MultiIntr);
+	regval &= 0x0f000; // clear all non-reserved bits
+	iowrite16(regval, iobase+MultiIntr);
+
+	// enable some interrupts
+	regval = RxOK|RxError|TxOK|RxBufferOverflow|RxFifoOverflow|SystemError|PacketUnderRunLinkChange;
+	iowrite16(regval, iobase+IntrMask);
+	ioread16(iobase+IntrMask);
 
     return rc;
 }
@@ -425,14 +480,14 @@ int __devinit rtl8139bks_probe(struct pci_dev* pdev, const struct pci_device_id*
     pio_end = pci_resource_end (pdev, 0);
     pio_len = pci_resource_len (pdev, 0);
     pio_flags = pci_resource_flags (pdev, 0);
-    printk(KERN_INFO "%s port-mapped I/O start: 0x%04lx, end: 0x%04lx, length: 0x%lx, flags: 0x%08lx\n", 
+    printk(KERN_INFO "%s io region 0 start: 0x%04lx, end: 0x%04lx, length: 0x%lx, flags: 0x%08lx\n", 
                       DRV_NAME, pio_start, pio_end, pio_len, pio_flags);
 
     mmio_start = pci_resource_start (pdev, 1);
     mmio_end = pci_resource_end (pdev, 1);
     mmio_len = pci_resource_len (pdev, 1);
     mmio_flags = pci_resource_flags (pdev, 1);
-    printk(KERN_INFO "%s memory-mapped I/O start: 0x%04lx, end: 0x%04lx, length: 0x%lx, flags: 0x%08lx\n", 
+    printk(KERN_INFO "%s io region 1 start: 0x%04lx, end: 0x%04lx, length: 0x%lx, flags: 0x%08lx\n", 
                       DRV_NAME, mmio_start, mmio_end, mmio_len, mmio_flags);
 
 
@@ -473,7 +528,8 @@ int __devinit rtl8139bks_probe(struct pci_dev* pdev, const struct pci_device_id*
 //  }
 
     memset(&ndev->broadcast[0], 255, 6);
-    memcpy_fromio(&ndev->dev_addr[0], ioaddr, 6);
+	// copy the six byte ethernet address from the io memory to the net_device structure.
+    memcpy_fromio(&ndev->dev_addr[0], (ioaddr+EthernetAddr), 6);
 
 #ifdef HAVE_NET_DEVICE_OPS
     ndev->netdev_ops = &rtl8139bks_netdev_ops;
