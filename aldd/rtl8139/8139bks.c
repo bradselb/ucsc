@@ -166,9 +166,10 @@ irqreturn_t bks_interrupt(int irq, void* dev_id)
 	intr_stat = bks_ioread16(priv, IntrStatus);
 	spin_unlock(&priv->lock);
 
-    printk(KERN_INFO "%s interrupt(), irq: %d, dev_id: %p, status: 0x%04x\n", DRV_NAME, irq, dev_id, intr_stat);
+    //printk(KERN_INFO "%s interrupt(), irq: %d, dev_id: %p, status: 0x%04x\n", DRV_NAME, irq, dev_id, intr_stat);
+
 	// use status to determine reason for interrupt.
-	if ((0xffff == intr_stat) || (0 == (intr_stat & 0x0e07f))) {
+	if ((0xffff == intr_stat) || (0 == intr_stat)) {
 		// spurious interrrupt?
 		handled = 0;
 		goto exit;
@@ -181,10 +182,10 @@ irqreturn_t bks_interrupt(int irq, void* dev_id)
 		bks_iowrite16(priv, IntrMask, priv->intr_mask); // disable the timer interrupt!
 		bks_iowrite16(priv, IntrStatus, ack); // ack the timer interrupt
 		barrier();
-		bks_iowrite32(priv, TimerInterval, 0); // do not timeout anymore.
+		//bks_iowrite32(priv, TimerInterval, 0x7fffffff);
 		bks_iowrite32(priv, TimerCount, 0); // reset the counter
 		spin_unlock(&priv->lock);
-		printk(KERN_INFO "%s timer timed out.\n", DRV_NAME);
+		printk(KERN_INFO "%s periodic timer interrupt.\n", DRV_NAME);
 		handled = 1;
 	}
 	
