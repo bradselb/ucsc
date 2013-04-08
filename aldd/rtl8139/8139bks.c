@@ -1,8 +1,9 @@
 // a basic PCI device driver for a generic
-// Realtek RTL8139 PCI Ethernet Card I bought on Amazon.com for $10
+// Realtek RTL8139 Ethernet PCI Card based upon
 // 
 // I've taken considerable inspiration from 8139too.c and 8139cp.c
-
+// and to a lesser extent, I've also gleened ideas from b44.c and 
+// the various Intel E1000 drivers.
 
 #define DRV_NAME "8139bks"
 #define DRV_VERSION "1.0"
@@ -34,11 +35,11 @@ MODULE_LICENSE("GPL v2");
 
 // --------------------------------------------------------------------------
 // I have two old Pentium-4 based desktop machines that I use for development.
-// One is a dell Dimension 2400 and the other is custome built based upon a
-// Micro-Star Int'l MS-7082 motherboard. Each of these machines has a ethernet
+// One is a Dell Dimension 2400 and the other is a custom built and based upon
+// a Micro-Star Int'l MS-7082 motherboard. Each of these machines has a ethernet
 // controller chip soldered to the motherboard. The Dell machine has a Broadcom
 // chip and the other machine has a RealTek RTL8100C. Each machine also has a 
-// generic PCI ethernet adapter card based upon the REalTek RTL8139D. 
+// generic PCI ethernet adapter card based upon the RealTek RTL8139D. 
 // Naturally, I want to be able to use eth0 during development. So, I want the 
 // device driver '8139too' to be bound to the rtl8100C chip on the motherboard. 
 // Obviously, I also want my driver to work for the RTL8139D on the PCI card. 
@@ -49,7 +50,7 @@ MODULE_LICENSE("GPL v2");
 // supports an 8139 family device with the subsystem vendor id, 0x1462. 
 // My driver will only support the generic Realtek Subsystem VendorID.
 static struct pci_device_id bks_pci_device_ids[] __devinitdata = {
-    {0x10ec, 0x8139, 0x10ec, 0x8139, 0, 0, 0 },
+    {0x10ec, 0x8139, 0x10ec, 0x8139, 0, 0, 0},
     { 0, 0}
 };
 
@@ -70,6 +71,10 @@ MODULE_DEVICE_TABLE(pci, bks_pci_device_ids);
 #define TX_BUF_SIZE	MAX_ETH_FRAME_SIZE
 #define TX_BUF_TOT_SIZE	(TX_BUF_SIZE * TX_DESCR_CNT )
 
+// use port I/O instead of memory mapped I/O in order to (hopefully)
+// avoid the so called "write post bug". 
+#define RTL8139BKS_USE_PIO
+
 
 
 // --------------------------------------------------------------------------
@@ -83,8 +88,8 @@ struct bks_private {
 
 	u16 intr_mask; // the interrupts of interest.
 
-    unsigned int cur_tx; // index of the next available Tx buffer.
-    unsigned int dirty_tx; // index of the 
+    unsigned int tx_front; // index of the most recently sent tx buf
+    unsigned int tx_back; // index of the least recently sent tx buf
     unsigned char* tx_buf[TX_DESCR_CNT]; // an array of pointers. each one points to the start of a Tx Buffer.
     unsigned char* tx_bufs; // points to a contiguous region large enough for four Tx buffers.
     dma_addr_t tx_bufs_dma;
@@ -96,36 +101,41 @@ struct bks_private {
 
     struct net_device_stats stats;
 
-    // spin lock protects access to chip's registers (?)
+    // spinlock protects access to chip's registers?
+	// or, protects access to the fields in this structure? 
     spinlock_t lock;
 };
 
 // --------------------------------------------------------------------------
 // forward declarations of functions
-static int __devinit bks_pci_probe(struct pci_dev* pci_dev, const struct pci_device_id* id);
-static void __devexit bks_pci_remove(struct pci_dev* pci_dev);
+// --------------------------------------------------------------------------
+static unsigned int bks_rd8(struct bks_private*, int offset);
+static unsigned int bks_rd16(struct bks_private*, int offset);
+static unsigned int bks_rd32(struct bks_private*, int offset);
+static int bks_wr8(struct bks_private*, int offset, unsigned int val);
+static int bks_wr16(struct bks_private*, int offset, unsigned int val);
+static int bks_wr32(struct bks_private*, int offset, unsigned int val);
 
-static irqreturn_t bks_interrupt(int irq, void* dev_id);
+static int bks_reset_chip (struct bks_private*);
+static int bks_init_hardware(struct bks_private*);
+static int bks_stop_hardware(struct bks_private*);
+static int is_tx_queue_full(struct bks_private*);
+static int bks_handle_tx_intr(struct bks_private*);
 
 static int bks_ndo_open(struct net_device* net_dev);
 static int bks_ndo_close(struct net_device* net_dev);
 static int bks_ndo_hard_start_xmit(struct sk_buff* skb, struct net_device* net_dev);
 static struct net_device_stats* bks_ndo_get_stats(struct net_device* net_dev);
 
+static int __devinit bks_pci_probe(struct pci_dev* pci_dev, const struct pci_device_id* id);
+static void __devexit bks_pci_remove(struct pci_dev* pci_dev);
+static irqreturn_t bks_interrupt(int irq, void* dev_id);
 
-static int bks_reset_chip (struct bks_private*);
-static int bks_init_hardware(struct bks_private*);
-static int bks_stop_hardware(struct bks_private*);
-static int bks_handle_tx_intr(struct bks_private* priv, unsigned int intr_status);
+static int __init bks_mod_init(void);
+static void __exit bks_mod_exit(void);
 
-static unsigned int bks_ioread8(struct bks_private*, int offset);
-static unsigned int bks_ioread16(struct bks_private*, int offset);
-static unsigned int bks_ioread32(struct bks_private*, int offset);
-static int bks_iowrite8(struct bks_private*, int offset, unsigned int val);
-static int bks_iowrite16(struct bks_private*, int offset, unsigned int val);
-static int bks_iowrite32(struct bks_private*, int offset, unsigned int val);
-
-
+// --------------------------------------------------------------------------
+// globals.
 // --------------------------------------------------------------------------
 static struct pci_driver bks_driver = {
     .name = DRV_NAME,
@@ -147,66 +157,272 @@ static struct net_device_ops bks_netdev_ops = {
 #endif
 
 // --------------------------------------------------------------------------
-// the interrupt service function. 
-irqreturn_t bks_interrupt(int irq, void* dev_id)
+// ************************ private functions ****************************
+// --------------------------------------------------------------------------
+//
+unsigned int bks_rd8(struct bks_private* priv, int offset)
 {
-    int handled = 0;
-    struct net_device* net_dev = (struct net_device*)dev_id;
-    struct bks_private* priv = netdev_priv(net_dev);
-    unsigned int intr_stat = 0;
-    //void* __iomem iobase = priv->ioaddr;
+	unsigned int regval = 0;
+#ifdef RTL8139BKS_USE_PIO
+	regval = inb(priv->pio_base + offset);
+#else
+	regval = ioread8(priv->ioaddr + offset);
+#endif
+	return regval;
+}
 
+// --------------------------------------------------------------------------
+unsigned int bks_rd16(struct bks_private* priv, int offset)
+{
+	unsigned int regval = 0;
+#ifdef RTL8139BKS_USE_PIO
+	regval = inw(priv->pio_base + offset);
+#else
+	regval = ioread16(priv->ioaddr + offset);
+#endif
+	return regval;
+}
 
-    if (!priv) {
-		goto exit;
-	}
+// --------------------------------------------------------------------------
+unsigned int bks_rd32(struct bks_private* priv, int offset)
+{
+	unsigned int regval = 0;
+#ifdef RTL8139BKS_USE_PIO
+	regval = inl(priv->pio_base + offset);
+#else
+	regval = ioread32(priv->ioaddr + offset);
+#endif
+	return regval;
+}
 
-	// read the interrupt status register
-	spin_lock(&priv->lock);
-	intr_stat = bks_ioread16(priv, IntrStatus);
-	spin_unlock(&priv->lock);
+// --------------------------------------------------------------------------
+int bks_wr8(struct bks_private* priv, int offset, unsigned int val)
+{
+	int rc = 0;
+#ifdef RTL8139BKS_USE_PIO
+	outb(val, priv->pio_base + offset);
+#else
+	iowrite8(val, priv->ioaddr + offset);
+#endif
+	return rc;
+}
 
-    //printk(KERN_INFO "%s interrupt(), irq: %d, dev_id: %p, status: 0x%04x\n", DRV_NAME, irq, dev_id, intr_stat);
+// --------------------------------------------------------------------------
+int bks_wr16(struct bks_private* priv, int offset, unsigned int val)
+{
+	int rc = 0;
+#ifdef RTL8139BKS_USE_PIO
+	outw(val, priv->pio_base + offset);
+#else
+	iowrite16(val, priv->ioaddr + offset);
+#endif
+	return rc;
+}
 
-	// use status to determine reason for interrupt.
-	if ((0xffff == intr_stat) || (0 == intr_stat)) {
-		// spurious interrrupt?
-		handled = 0;
-		goto exit;
-	}
-	
-	if (intr_stat & TimerTimedOut) {
-		// the timer timed out
-		unsigned int ack = TimerTimedOut;
-		spin_lock(&priv->lock);
-		bks_iowrite16(priv, IntrMask, priv->intr_mask); // disable the timer interrupt!
-		bks_iowrite16(priv, IntrStatus, ack); // ack the timer interrupt
+// --------------------------------------------------------------------------
+int bks_wr32(struct bks_private* priv, int offset, unsigned int val)
+{
+	int rc = 0;
+#ifdef RTL8139BKS_USE_PIO
+	outl(val, priv->pio_base + offset);
+#else
+	iowrite32(val, priv->ioaddr + offset);
+#endif
+	return rc;
+}
+
+// --------------------------------------------------------------------------
+int bks_reset_chip (struct bks_private* priv)
+{
+	int rc = 1;
+   //void* __iomem iobase = priv->ioaddr;
+
+	// command a soft reset
+    bks_wr8(priv, ChipCmd, CmdSoftReset);
+
+    // wait here until the chip says it has completed the reset
+	for (int i = 1000; 0 < i; --i) {
 		barrier();
-		//bks_iowrite32(priv, TimerInterval, 0x7fffffff);
-		bks_iowrite32(priv, TimerCount, 0); // reset the counter
-		spin_unlock(&priv->lock);
-		printk(KERN_INFO "%s periodic timer interrupt.\n", DRV_NAME);
-		handled = 1;
+		if (0 == (bks_rd8(priv, ChipCmd) & CmdSoftReset)) {
+			rc = 0; // success.
+			break;
+		}
+		udelay(10);
 	}
-	
-	if (intr_stat & (RxOK | RxBufferOverflow | RxFifoOverflow)) {
-		// deal with received packet.
-		handled = 1;
-	}
-
-	if (intr_stat & (TxOK | TxError)) {
-		// deal with transmission.
-		handled = bks_handle_tx_intr(priv, intr_stat);
-	}
-
-exit:
-    return IRQ_RETVAL(handled);
+	return rc;
 }
 
 
 
-// **************** net device ops ****************************** 
+// --------------------------------------------------------------------------
+static int bks_init_hardware(struct bks_private* priv)
+{
+    int rc = 0;
+	unsigned int regval = 0;
+	unsigned int reserved;
+	unsigned int hw_version_id = 0;
 
+	void* __iomem iobase = priv->ioaddr;
+
+    printk(KERN_INFO "%s init_hardware()\n", DRV_NAME);
+
+    if (0 != bks_reset_chip(priv)) {
+		printk(KERN_WARNING "%s timedout waiting for reset to complete\n", DRV_NAME);
+	}
+
+	// read and report the media status
+	regval = ioread8(iobase + MediaStatus);
+	printk(KERN_INFO "%s Media Status: 0x%02x\n", DRV_NAME, regval);
+	//printk(KERN_INFO "%s \n", DRV_NAME);
+
+	// tell the device the bus address of our receive buffer. 
+	bks_wr32(priv, RxBufStartAddr, priv->rx_ring_dma);
+
+	// command the chip to enable receive and transmit.
+	regval = bks_rd8(priv, ChipCmd);
+	regval = regval | CmdTxEnable | CmdRxEnable;
+	bks_wr8(priv, ChipCmd, regval);
+
+	// set the receive config
+	regval = bks_rd32(priv, RxConfig);
+	reserved = regval & 0xf0fc0040; // these bits are marked reserved on the data sheet.
+	regval = regval | priv->rx_config;
+	bks_wr32(priv, RxConfig, regval);
+	regval = bks_rd32(priv, RxConfig);
+	printk(KERN_INFO "%s Rx Config: 0x%08x\n", DRV_NAME, regval);
+
+	// discover the HW version Id
+	regval = bks_rd32(priv, TxConfig);
+	hw_version_id = ((regval & 0x7c000000)>>24) | ((regval & 0x00c00000)>>22);
+	printk(KERN_INFO "%s HW Version Id: 0x%02x\n", DRV_NAME, hw_version_id);
+	// and set the Tx config.
+	regval = regval | (3<<24) | (3<<9);
+	regval = regval & ~((3<<17) | (1<<8) | (0x0f<<4)); // clear bits 4,5,6,7,8,17 and 18.
+	bks_wr32(priv, TxConfig, regval);
+	regval = bks_rd32(priv, TxConfig);
+	printk(KERN_INFO "%s Tx Config: 0x%08x\n", DRV_NAME, regval);
+
+
+	// set the physical address of each of the TX buffers
+	for (int i=0; i<TX_DESCR_CNT; ++i) {
+		unsigned int offset;
+		offset = priv->tx_buf[i] - priv->tx_bufs; // offset of this tx buf relative to start 
+		bks_wr32(priv, TxAddr0 + 4*i, priv->tx_bufs_dma + offset);
+	}
+
+
+	bks_wr32(priv, RxMissedCount, 0); // reset the missed packet counter.
+	bks_wr32(priv, TimerCount, 0); // reset the timer/counter
+	bks_wr32(priv, TimerInterval, 0x7fffffff); // ask for a interrupt after some time has passed.
+	barrier();
+
+	// disable multi-interrrupts ?
+	regval = bks_rd16(priv, MultiIntr);
+	regval &= 0x0f000; // clear all non-reserved bits
+	bks_wr16(priv, MultiIntr, regval);
+
+	// clear any pending interrupt.
+	regval = bks_rd16(priv, IntrStatus);
+	regval = regval | ~0x1f80; // bits [12..7] are reserved. Set all the reset.
+	bks_wr16(priv, IntrStatus, regval);
+
+	// enable some interrupts
+	regval = priv->intr_mask;
+	regval |= TimerTimedOut; // enable the counter/timer interrupt too.
+	bks_wr16(priv, IntrMask, regval);
+	barrier();
+
+    return rc;
+}
+
+
+// --------------------------------------------------------------------------
+// undo what was done in init_hardware() 
+int bks_stop_hardware(struct bks_private* priv)
+{
+	int rc = 0;
+	//void* __iomem iobase = priv->ioaddr;
+	unsigned int regval = 0;
+
+    // disable all interrupts 
+	bks_wr16(priv, IntrMask, 0);
+	
+    // command chip to disable receive and transmit
+	regval = bks_rd8(priv, ChipCmd);
+	regval = regval & ~(CmdTxEnable | CmdRxEnable);
+	bks_wr8(priv, ChipCmd, regval);
+
+	return rc;
+}
+
+// --------------------------------------------------------------------------
+// since both front and back are initalized to zero, this is not quite correct. 
+int how_many_bufs_in_tx_queue(struct bks_private* priv)
+{
+	int n = TX_DESCR_CNT;
+	int count = 0;
+	if (!(0 == priv->tx_front && 0 == priv->tx_back)) {
+		count = ((n + priv->tx_front - priv->tx_back) % n) + 1;
+	}
+	return count;
+}
+
+
+// --------------------------------------------------------------------------
+int is_tx_queue_full(struct bks_private* priv)
+{
+	return !(how_many_bufs_in_tx_queue(priv) < TX_DESCR_CNT);
+}
+
+// --------------------------------------------------------------------------
+// purpose is mainly to clean up the tx buffers and fix up the accounting. 
+// it is assumed that the caller holds the spinlock when this fctn is called. 
+int bks_handle_tx_intr(struct bks_private* priv)
+{
+	int handled = 1;
+	struct net_device* net_dev = priv->net_dev;
+	unsigned int idx = priv->tx_back; // an index into the tx_buf array
+	int nr_remaining = 0; // how many tx bufs are in the queue
+	unsigned int txstatus = 0;
+
+	nr_remaining = how_many_bufs_in_tx_queue(priv);
+
+	while (0 < nr_remaining) {
+		txstatus = bks_rd32(priv, TxStatus0 + (idx * sizeof(u32)));
+
+		if (!(txstatus & (TxStatusTxComplete)) || !(txstatus & TxStatusOwn)) {
+			// he's not done with this buffer yet.
+			break;
+		}
+
+		if (txstatus & TxStatusTxOk) {
+			priv->stats.tx_bytes += (txstatus & TxStatusTxByteCountMask);
+			priv->stats.tx_packets += 1;
+		}
+
+		idx = (idx + 1) % TX_DESCR_CNT;
+		--nr_remaining;
+	} // while
+
+	if (priv->tx_back != idx) {
+		// we freed up some buffers in the tx queue
+		priv->tx_back = idx;
+		mb();
+		if (netif_queue_stopped(net_dev)) {
+			printk(KERN_INFO "%s wake TX queue\n", DRV_NAME);
+			netif_wake_queue(net_dev);
+		}
+	}
+
+	return handled;
+}
+
+
+
+
+
+// --------------------------------------------------------------------------
+// **************** net device ops ****************************** 
 // --------------------------------------------------------------------------
 int bks_ndo_open(struct net_device* net_dev)
 {
@@ -242,14 +458,14 @@ int bks_ndo_open(struct net_device* net_dev)
 	// no rx thresh, rx buf len = 32k+16max rx dma burst 1024, 
 	priv->rx_config = 0x0000f68a; // todo: create nice symbolic names for these bits. 
 
-	//priv->intr_mask = RxOK|RxError|TxOK|RxBufferOverflow|RxFifoOverflow|SystemError|PacketUnderRunLinkChange|TimerTimedOut;
-	priv->intr_mask = RxOK|RxError|TxOK|RxBufferOverflow|RxFifoOverflow|SystemError|PacketUnderRunLinkChange;
+	//priv->intr_mask = RxOK|RxError|TxOK|TxError|RxBufferOverflow|RxFifoOverflow|SystemError|PacketUnderRunLinkChange|TimerTimedOut;
+	priv->intr_mask = RxOK|RxError|TxOK|TxError|RxBufferOverflow|RxFifoOverflow|SystemError|PacketUnderRunLinkChange;
 
     // initialize all of the rest of the private data
     // especially the buffer accounting.
     priv->cur_rx = 0;
-    priv->cur_tx = 0;
-    priv->dirty_tx = 0;
+    priv->tx_front = 0;
+    priv->tx_back = 0;
     for (int i=0; i<TX_DESCR_CNT; ++i) {
         priv->tx_buf[i] = &priv->tx_bufs[i * TX_BUF_SIZE];
     }
@@ -276,7 +492,6 @@ exit:
 }
 
 // --------------------------------------------------------------------------
-// 
 int bks_ndo_close(struct net_device* net_dev)
 {
     int rc = 0;
@@ -306,8 +521,8 @@ int bks_ndo_close(struct net_device* net_dev)
 
 
     // re-set transmit accounting.
-    priv->cur_tx = 0;
-    priv->dirty_tx = 0;
+    priv->tx_front = 0;
+    priv->tx_back = 0;
 
 
     return rc;
@@ -315,12 +530,60 @@ int bks_ndo_close(struct net_device* net_dev)
 
 
 // --------------------------------------------------------------------------
+// copy the data from the skb to a tx dma buffer and tell the chip to 
+// start DMA and transmission. then, free the skb
 int bks_ndo_hard_start_xmit(struct sk_buff* skb, struct net_device* dev)
 {
-    //printk(KERN_INFO "%s ndo_hard_start_xmit()\n", DRV_NAME);
-    dev_kfree_skb(skb); // Just free it for now
+    int rc = NETDEV_TX_OK;
+	struct bks_private* priv = netdev_priv(dev);
+	unsigned int idx; // an index into the tx_buf array
+	unsigned int len = skb->len;
+	unsigned long flags;
+	unsigned int reg = TxStatus0;
+	unsigned int val = 0;
+	
 
-    return 0;
+    printk(KERN_INFO "%s ndo_hard_start_xmit()\n", DRV_NAME);
+
+	if (unlikely(TX_BUF_SIZE < len)) {
+		dev_kfree_skb(skb);
+		priv->stats.tx_dropped += 1;
+		goto exit;
+	}
+
+	idx = (priv->tx_front + 1) % TX_DESCR_CNT;
+
+	if (len < ETH_ZLEN) {
+		memset(priv->tx_buf[idx], 0, ETH_ZLEN);
+	}
+
+	skb_copy_and_csum_dev(skb, priv->tx_buf[idx]);
+	dev_kfree_skb(skb);
+
+	spin_lock_irqsave(&priv->lock, flags);
+
+	wmb();
+	reg = TxStatus0 + (idx * sizeof(u32));
+	// early Tx threshold: 32*32 = 1024 bytes
+	val = ((32<<TxStatusEarlyTxThreshShift) & TxStatusEarlyTxThreshMask);
+	// TX data size: len.
+	val |= (len & TxStatusTxByteCountMask);
+	// tell the devie that it owns the buffer now.
+	val &= ~TxStatusOwn;
+
+	bks_wr32(priv, reg, val);
+
+	priv->tx_front = idx;
+
+	if (is_tx_queue_full(priv)) {
+		printk(KERN_INFO "%s Tx queue is full.\n", DRV_NAME);
+		netif_stop_queue(dev);
+	}
+
+	spin_unlock_irqrestore(&priv->lock, flags);
+
+exit: 
+    return rc;
 }
 
 // --------------------------------------------------------------------------
@@ -337,222 +600,8 @@ struct net_device_stats* bks_ndo_get_stats(struct net_device* dev)
     return stats;
 }
 
-// ************************ private functions ****************************
-// --------------------------------------------------------------------------
-static int bks_reset_chip (struct bks_private* priv)
-{
-	int rc = 1;
-   //void* __iomem iobase = priv->ioaddr;
-
-	// command a soft reset
-    bks_iowrite8(priv, ChipCmd, CmdSoftReset);
-
-    // wait here until the chip says it has completed the reset
-	for (int i = 1000; 0 < i; --i) {
-		barrier();
-		if (0 == (bks_ioread8(priv, ChipCmd) & CmdSoftReset)) {
-			rc = 0; // success.
-			break;
-		}
-		udelay(10);
-	}
-	return rc;
-}
-
-
 
 // --------------------------------------------------------------------------
-static int bks_init_hardware(struct bks_private* priv)
-{
-    int rc = 0;
-	unsigned int regval = 0;
-	unsigned int reserved;
-	unsigned int hw_version_id = 0;
-
-	void* __iomem iobase = priv->ioaddr;
-
-    printk(KERN_INFO "%s init_hardware()\n", DRV_NAME);
-
-    if (0 != bks_reset_chip(priv)) {
-		printk(KERN_WARNING "%s timedout waiting for reset to complete\n", DRV_NAME);
-	}
-
-	// read and report the media status
-	regval = ioread8(iobase + MediaStatus);
-	printk(KERN_INFO "%s Media Status: 0x%02x\n", DRV_NAME, regval);
-	//printk(KERN_INFO "%s \n", DRV_NAME);
-
-	// tell the device the bus address of our receive buffer. 
-	bks_iowrite32(priv, RxBufStartAddr, priv->rx_ring_dma);
-
-	// command the chip to enable receive and transmit.
-	regval = bks_ioread8(priv, ChipCmd);
-	regval = regval | CmdTxEnable | CmdRxEnable;
-	bks_iowrite8(priv, ChipCmd, regval);
-
-	// set the receive config
-	regval = bks_ioread32(priv, RxConfig);
-	reserved = regval & 0xf0fc0040; // these bits are marked reserved on the data sheet.
-	regval = regval | priv->rx_config;
-	bks_iowrite32(priv, RxConfig, regval);
-	regval = bks_ioread32(priv, RxConfig);
-	printk(KERN_INFO "%s Rx Config: 0x%08x\n", DRV_NAME, regval);
-
-	// discover the HW version Id
-	regval = bks_ioread32(priv, TxConfig);
-	hw_version_id = ((regval & 0x7c000000)>>24) | ((regval & 0x00c00000)>>22);
-	printk(KERN_INFO "%s HW Version Id: 0x%02x\n", DRV_NAME, hw_version_id);
-	// and set the Tx config.
-	regval = regval | (3<<24) | (3<<9);
-	regval = regval & ~((3<<17) | (1<<8) | (0x0f<<4)); // clear bits 4,5,6,7,8,17 and 18.
-	bks_iowrite32(priv, TxConfig, regval);
-	regval = bks_ioread32(priv, TxConfig);
-	printk(KERN_INFO "%s Tx Config: 0x%08x\n", DRV_NAME, regval);
-
-
-	// set the physical address of each of the TX buffers
-	for (int i=0; i<TX_DESCR_CNT; ++i) {
-		unsigned int offset;
-		offset = priv->tx_buf[i] - priv->tx_bufs; // offset of this tx buf relative to start 
-		bks_iowrite32(priv, TxAddr0 + 4*i, priv->tx_bufs_dma + offset);
-	}
-
-
-	bks_iowrite32(priv, RxMissedCount, 0); // reset the missed packet counter.
-	bks_iowrite32(priv, TimerCount, 0); // reset the timer/counter
-	bks_iowrite32(priv, TimerInterval, 0x7fffffff); // ask for a interrupt after some time has passed.
-	barrier();
-
-	// disable multi-interrrupts ?
-	regval = bks_ioread16(priv, MultiIntr);
-	regval &= 0x0f000; // clear all non-reserved bits
-	bks_iowrite16(priv, MultiIntr, regval);
-	//regval = bks_ioread16(priv, MultiIntr);
-
-	// clear any pending interrupt.
-	regval = bks_ioread16(priv, IntrStatus);
-	regval = regval | ~0x1f80; // bits [12..7] are reserved. Set all the reset.
-	bks_iowrite16(priv, IntrStatus, regval);
-
-	// enable some interrupts
-	regval = priv->intr_mask;
-	regval |= TimerTimedOut; // enable the timer once.
-	bks_iowrite16(priv, IntrMask, regval);
-	barrier();
-
-    return rc;
-}
-
-
-// --------------------------------------------------------------------------
-// undo what was done in init_hardware() 
-int bks_stop_hardware(struct bks_private* priv)
-{
-	int rc = 0;
-	//void* __iomem iobase = priv->ioaddr;
-	unsigned int regval = 0;
-
-    // disable all interrupts 
-	bks_iowrite16(priv, IntrMask, 0);
-	
-    // command chip to disable receive and transmit
-	regval = bks_ioread8(priv, ChipCmd);
-	regval = regval & ~(CmdTxEnable | CmdRxEnable);
-	bks_iowrite8(priv, ChipCmd, regval);
-
-	return rc;
-}
-
-
-// --------------------------------------------------------------------------
-int bks_handle_tx_intr(struct bks_private* priv, unsigned int intr_status)
-{
-	int handled = 1;
-
-	return handled;
-}
-
-
-
-// avoid the so called "write post" bug by simply using port I/O instead of
-// memory mapped I/O
-#define RTL8139BKS_USE_PIO
-
-// --------------------------------------------------------------------------
-unsigned int bks_ioread8(struct bks_private* priv, int offset)
-{
-	unsigned int regval = 0;
-#ifdef RTL8139BKS_USE_PIO
-	regval = inb(priv->pio_base + offset);
-#else
-	regval = ioread8(priv->ioaddr + offset);
-#endif
-	return regval;
-}
-
-// --------------------------------------------------------------------------
-unsigned int bks_ioread16(struct bks_private* priv, int offset)
-{
-	unsigned int regval = 0;
-#ifdef RTL8139BKS_USE_PIO
-	regval = inw(priv->pio_base + offset);
-#else
-	regval = ioread16(priv->ioaddr + offset);
-#endif
-	return regval;
-}
-
-// --------------------------------------------------------------------------
-unsigned int bks_ioread32(struct bks_private* priv, int offset)
-{
-	unsigned int regval = 0;
-#ifdef RTL8139BKS_USE_PIO
-	regval = inl(priv->pio_base + offset);
-#else
-	regval = ioread32(priv->ioaddr + offset);
-#endif
-	return regval;
-}
-
-// --------------------------------------------------------------------------
-int bks_iowrite8(struct bks_private* priv, int offset, unsigned int val)
-{
-	int rc = 0;
-#ifdef RTL8139BKS_USE_PIO
-	outb(val, priv->pio_base + offset);
-#else
-	iowrite8(val, priv->ioaddr + offset);
-#endif
-	return rc;
-}
-
-// --------------------------------------------------------------------------
-int bks_iowrite16(struct bks_private* priv, int offset, unsigned int val)
-{
-	int rc = 0;
-#ifdef RTL8139BKS_USE_PIO
-	outw(val, priv->pio_base + offset);
-#else
-	iowrite16(val, priv->ioaddr + offset);
-#endif
-	return rc;
-}
-
-// --------------------------------------------------------------------------
-int bks_iowrite32(struct bks_private* priv, int offset, unsigned int val)
-{
-	int rc = 0;
-#ifdef RTL8139BKS_USE_PIO
-	outl(val, priv->pio_base + offset);
-#else
-	iowrite32(val, priv->ioaddr + offset);
-#endif
-	return rc;
-}
-
-
-
-
 // **************** PCI device ****************************** 
 // --------------------------------------------------------------------------
 int __devinit bks_pci_probe(struct pci_dev* pci_dev, const struct pci_device_id* id)
@@ -694,12 +743,6 @@ out:
 }
 
 // --------------------------------------------------------------------------
-// Get address of netdevice, device private structures and ioaddr
-// Unregister and free netdevice
-// Unmap the device MMIO region. Also set: priv->mmio_addr = NULL
-// Release the ownership of IO memory region
-// call: pci_set_drvdata(pci_dev, NULL)
-// Disable PCI device
 void __devexit bks_pci_remove(struct pci_dev* pci_dev)
 {
     struct net_device* net_dev = 0;
@@ -719,8 +762,8 @@ void __devexit bks_pci_remove(struct pci_dev* pci_dev)
 		}
 
 		// disable interrupts
-		//bks_iowrite16(priv, IntrMask, 0);
-		//bks_ioread16(priv, IntrMask);
+		//bks_wr16(priv, IntrMask, 0);
+		//bks_rd16(priv, IntrMask);
         
 		pci_iounmap(pci_dev, ioaddr);
         priv->ioaddr = 0; // prophy.
@@ -737,8 +780,72 @@ void __devexit bks_pci_remove(struct pci_dev* pci_dev)
 
 }
 
+// --------------------------------------------------------------------------
+// the interrupt service function. 
+irqreturn_t bks_interrupt(int irq, void* dev_id)
+{
+    int handled = 0;
+    struct net_device* net_dev = (struct net_device*)dev_id;
+    struct bks_private* priv = netdev_priv(net_dev);
+    unsigned int intr_stat = 0;
+	unsigned int ack = 0;
+    //void* __iomem iobase = priv->ioaddr;
 
-// **************** basic driver ******************************
+	// this is way too chatty....
+    //printk(KERN_INFO "%s interrupt(), irq: %d, dev_id: %p, status: 0x%04x\n", DRV_NAME, irq, dev_id, intr_stat);
+
+	// read the interrupt status register
+	intr_stat = bks_rd16(priv, IntrStatus);
+
+	// spurious interrrupt?
+	if ((0xffff == intr_stat) || (0 == intr_stat)) {
+		handled = 0;
+		goto exit;
+	}
+	
+    printk(KERN_INFO "%s intr status: 0x%04x\n", DRV_NAME, intr_stat);
+
+	// grab the lock and hold it for the entire duration of this fctn.
+	spin_lock(&priv->lock);
+
+	// counter/timer interrupt? 
+	if (intr_stat & TimerTimedOut) {
+		// the timer timed out
+		ack |= TimerTimedOut;
+		bks_wr16(priv, IntrMask, priv->intr_mask); // disable the timer interrupt!
+		bks_wr32(priv, TimerCount, 0); // reset the counter
+		barrier();
+		printk(KERN_INFO "%s counter/timer interrupt.\n", DRV_NAME);
+		handled = 1;
+	}
+	
+	// receive interrupt? 
+	if (intr_stat & (RxOK | RxBufferOverflow | RxFifoOverflow)) {
+		// deal with received packet.
+		ack |= (intr_stat & (RxOK | RxBufferOverflow | RxFifoOverflow));
+		handled = 1;
+	}
+
+	// transmit complete interrupt?
+	if (intr_stat & (TxOK | TxError)) {
+		// deal with transmission.
+		ack |= (intr_stat & (TxOK | TxError));
+		handled = bks_handle_tx_intr(priv);
+	}
+
+	// ack all the interrupts that were serviced
+	bks_wr16(priv, IntrStatus, ack);
+
+	spin_unlock(&priv->lock);
+
+exit:
+    return IRQ_RETVAL(handled);
+}
+
+
+
+// --------------------------------------------------------------------------
+// ************************** module ******************************
 // --------------------------------------------------------------------------
 int __init bks_mod_init(void)
 {

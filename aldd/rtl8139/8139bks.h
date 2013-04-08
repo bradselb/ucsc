@@ -50,7 +50,7 @@ enum ChipCommandBits {
 	// bits 5,6,7 are reserved.
 };
 
-// interrrupt status and mask register bitTimer
+// interrrupt status and mask register bits
 enum InterruptStatusBits {
 	RxOK = (1<<0),
 	RxError = (1<<1),
@@ -67,5 +67,20 @@ enum InterruptStatusBits {
 	RxAckBits = (RxFifoOverflow | RxBufferOverflow | RxOK),
 }; 
 
+// Tx Status register bits
+enum TxStatusBits {
+	TxStatusTxByteCountMask = (0x1fff), // bits [0..12]
+	TxStatusOwn = (1<<13),
+	TxStatusFifoUnderrun = (1<<14),
+	TxStatusTxOk = (1<<15),
+	TxStatusEarlyTxThreshShift = (16),
+	TxStatusEarlyTxThreshMask = (0x3f << TxStatusEarlyTxThreshShift),
+	TxStatusCollisionCountShift = (24),
+	TxStatusCollisionCountMask = (0x0f << TxStatusCollisionCountShift),
+	TxStatusOutOfWindow = (1<<29),
+	TxStatusTxAbort = (1<<30),
+	TxStatusCarrierSenseLost = (1<<31),
+	TxStatusTxComplete = (TxStatusTxOk | TxStatusTxAbort), 
+};
 
 #endif // !defined RTL8139BKS_H
