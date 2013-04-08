@@ -1,0 +1,8 @@
+*.ko
+*.o
+*.pdf
+*.tgz
+*.tar
+*.bz2
+*.gzip
+
