@@ -20,18 +20,18 @@ enum RegisterNames {
     RxConfig = 0x0044, 
     TimerCount = 0x0048, // a counter/timer that counts up from zero. Reads clear it.
     RxMissedCount = 0x004c, // 24 bit missed packet counter. any write clears
-	Cfg9346 = 0x0050,
-	Config0 = 0x0051,
-	Config1 = 0x0052,
-	TimerInterval = 0x0054, // 32 bit value. when timer reaches this value, an interrupt is generated. 
-	MediaStatus = 0x0058,
-	Config3 = 0x0059,
-	Config4 = 0x005A,
-	MultiIntr = 0x005C, // multiple interrupt (2 bytes)
+    Cfg9346 = 0x0050,
+    Config0 = 0x0051,
+    Config1 = 0x0052,
+    TimerInterval = 0x0054, // 32 bit value. when timer reaches this value, an interrupt is generated. 
+    MediaStatus = 0x0058,
+    Config3 = 0x0059,
+    Config4 = 0x005A,
+    MultiIntr = 0x005C, // multiple interrupt (2 bytes)
     PciRevision = 0x005E,
     TxSummary = 0x0060,
-	BasicModeCtrl = 0x0062,
-	BasicModeStatus	= 0x0064,
+    BasicModeCtrl = 0x0062,
+    BasicModeStatus = 0x0064,
     DisconnectCount = 0x006c,
     FalseCarrierSenseCount = 0x006e,
     NwayTest = 0x0070,
@@ -43,44 +43,44 @@ enum RegisterNames {
 
 // symbolic names for the bits in the command register
 enum ChipCommandBits {
-	RxBufferEmpty = (1<<0), // read only.
-	CmdTxEnable = (1<<2),
-   	CmdRxEnable = (1<<3),
-	CmdSoftReset = (1<<4),
-	// bits 5,6,7 are reserved.
+    RxBufferEmpty = (1<<0), // read only.
+    CmdTxEnable = (1<<2),
+    CmdRxEnable = (1<<3),
+    CmdSoftReset = (1<<4),
+    // bits 5,6,7 are reserved.
 };
 
 // interrrupt status and mask register bits
 enum InterruptStatusBits {
-	RxOK = (1<<0),
-	RxError = (1<<1),
-	TxOK = (1<<2),
-	TxError = (1<<3),
-	RxBufferOverflow = (1<<4),
-	PacketUnderRunLinkChange = (1<<5),
-	RxFifoOverflow = (1<<6),
-	// bits [7..12] reserved
-	CableLengthChange = (1<<13),
-	TimerTimedOut = (1<<14),
-	SystemError = (1<<15),
+    RxOK = (1<<0),
+    RxError = (1<<1),
+    TxOK = (1<<2),
+    TxError = (1<<3),
+    RxBufferOverflow = (1<<4),
+    PacketUnderRunLinkChange = (1<<5),
+    RxFifoOverflow = (1<<6),
+    // bits [7..12] reserved
+    CableLengthChange = (1<<13),
+    TimerTimedOut = (1<<14),
+    SystemError = (1<<15),
 
-	RxAckBits = (RxFifoOverflow | RxBufferOverflow | RxOK),
+    RxAckBits = (RxFifoOverflow | RxBufferOverflow | RxOK),
 }; 
 
 // Tx Status register bits
 enum TxStatusBits {
-	TxStatusTxByteCountMask = (0x1fff), // bits [0..12]
-	TxStatusOwn = (1<<13),
-	TxStatusFifoUnderrun = (1<<14),
-	TxStatusTxOk = (1<<15),
-	TxStatusEarlyTxThreshShift = (16),
-	TxStatusEarlyTxThreshMask = (0x3f << TxStatusEarlyTxThreshShift),
-	TxStatusCollisionCountShift = (24),
-	TxStatusCollisionCountMask = (0x0f << TxStatusCollisionCountShift),
-	TxStatusOutOfWindow = (1<<29),
-	TxStatusTxAbort = (1<<30),
-	TxStatusCarrierSenseLost = (1<<31),
-	TxStatusTxComplete = (TxStatusTxOk | TxStatusTxAbort), 
+    TxStatusTxByteCountMask = (0x1fff), // bits [0..12]
+    TxStatusOwn = (1<<13),
+    TxStatusFifoUnderrun = (1<<14),
+    TxStatusTxOk = (1<<15),
+    TxStatusEarlyTxThreshShift = (16),
+    TxStatusEarlyTxThreshMask = (0x3f << TxStatusEarlyTxThreshShift),
+    TxStatusCollisionCountShift = (24),
+    TxStatusCollisionCountMask = (0x0f << TxStatusCollisionCountShift),
+    TxStatusOutOfWindow = (1<<29),
+    TxStatusTxAbort = (1<<30),
+    TxStatusCarrierSenseLost = (1<<31),
+    TxStatusTxComplete = (TxStatusTxOk | TxStatusTxAbort), 
 };
 
 #endif // !defined RTL8139BKS_H
