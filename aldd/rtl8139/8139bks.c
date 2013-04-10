@@ -545,10 +545,8 @@ int bks_ndo_hard_start_xmit(struct sk_buff* skb, struct net_device* dev)
         goto exit;
     }
 
-    spin_lock_irqsave(&priv->lock, flags);
 
     idx = (priv->tx_back) % TX_DESCR_CNT;
-    priv->tx_back = (idx + 1) % TX_DESCR_CNT;
 
     if (len < ETH_ZLEN) {
         memset(priv->tx_buf[idx], 0, ETH_ZLEN);
@@ -557,17 +555,22 @@ int bks_ndo_hard_start_xmit(struct sk_buff* skb, struct net_device* dev)
     skb_copy_and_csum_dev(skb, priv->tx_buf[idx]);
     dev_kfree_skb(skb);
 
+    spin_lock_irqsave(&priv->lock, flags);
+
     wmb();
     reg = TxStatus0 + (idx * sizeof(u32));
     // early Tx threshold: 32*32 = 1024 bytes
     val = ((32<<TxStatusEarlyTxThreshShift) & TxStatusEarlyTxThreshMask);
     // TX data size: len.
     val |= (len & TxStatusTxByteCountMask);
-    // tell the devie that it owns the buffer now.
+    // tell the device that it owns the buffer now.
     val &= ~TxStatusOwn;
 
     bks_wr32(priv, reg, val);
+    val = bks_rd32(priv, reg);
+    printk(KERN_INFO "%s, wrote 0x%08x to register 0x%08x\n", DRV_NAME, val, reg);
 
+    priv->tx_back = (idx + 1) % TX_DESCR_CNT;
     if (is_tx_queue_full(priv)) {
         printk(KERN_INFO "%s pause TX queue.\n", DRV_NAME);
         netif_stop_queue(dev);
