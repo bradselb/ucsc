@@ -94,9 +94,9 @@ struct bks_private {
     unsigned char* tx_bufs; // points to a contiguous region large enough for four Tx buffers.
     dma_addr_t tx_bufs_dma;
 
-    void* rx_ring;
-    unsigned int cur_rx;
-    dma_addr_t rx_ring_dma;
+    unsigned int rx_idx; // an index into the rx buffer
+    void* rx_buf; // the virtual address of a receive buffer
+    dma_addr_t rx_buf_dma; // the bus address of the rx buffer
     unsigned int rx_config;
 
     struct net_device_stats stats;
@@ -276,7 +276,7 @@ static int bks_init_hardware(struct bks_private* priv)
     //printk(KERN_INFO "%s \n", DRV_NAME);
 
     // tell the device the bus address of our receive buffer. 
-    bks_wr32(priv, RxBufStartAddr, priv->rx_ring_dma);
+    bks_wr32(priv, RxBufStartAddr, priv->rx_buf_dma);
 
     // command the chip to enable receive and transmit.
     regval = bks_rd8(priv, ChipCmd);
@@ -441,15 +441,15 @@ int bks_ndo_open(struct net_device* net_dev)
         rc = -ENOMEM;
         goto err_out_free_irq;
     }
-    priv->rx_ring = pci_alloc_consistent(priv->pci_dev, RX_BUF_TOT_SIZE, &priv->rx_ring_dma);
-    if (!priv->rx_ring) {
+    priv->rx_buf = pci_alloc_consistent(priv->pci_dev, RX_BUF_TOT_SIZE, &priv->rx_buf_dma);
+    if (!priv->rx_buf) {
         rc = -ENOMEM;
         goto err_out_free_dma;
     }
 
 
     // nowrap, accept packets that match my hw address, accept broadcast, 
-    // no rx thresh, rx buf len = 32k+16max rx dma burst 1024, 
+    // no rx thresh, rx buf len = 32k+16, max rx dma burst 1024, 
     priv->rx_config = 0x0000f68a; // todo: create nice symbolic names for these bits. 
 
     //priv->intr_mask = RxOK|RxError|TxOK|TxError|RxBufferOverflow|RxFifoOverflow|SystemError|PacketUnderRunLinkChange|TimerTimedOut;
@@ -457,7 +457,7 @@ int bks_ndo_open(struct net_device* net_dev)
 
     // initialize all of the rest of the private data
     // especially the buffer accounting.
-    priv->cur_rx = 0;
+    priv->rx_idx = 0;
     priv->tx_back = 0;
     priv->tx_front = 0;
     for (int i=0; i<TX_DESCR_CNT; ++i) {
@@ -471,8 +471,8 @@ int bks_ndo_open(struct net_device* net_dev)
     goto exit; // successfully.
 
 err_out_free_dma:
-    if (priv->rx_ring) {
-        pci_free_consistent(priv->pci_dev, RX_BUF_TOT_SIZE, priv->rx_ring, priv->rx_ring_dma);
+    if (priv->rx_buf) {
+        pci_free_consistent(priv->pci_dev, RX_BUF_TOT_SIZE, priv->rx_buf, priv->rx_buf_dma);
     }
     if (priv->tx_bufs) {
         pci_free_consistent(priv->pci_dev, TX_BUF_TOT_SIZE, priv->tx_bufs, priv->tx_bufs_dma);
@@ -502,8 +502,8 @@ int bks_ndo_close(struct net_device* net_dev)
     // update statistics
 
     // free dma buffers
-    if (priv->rx_ring) {
-        pci_free_consistent(priv->pci_dev, RX_BUF_TOT_SIZE, priv->rx_ring, priv->rx_ring_dma);
+    if (priv->rx_buf) {
+        pci_free_consistent(priv->pci_dev, RX_BUF_TOT_SIZE, priv->rx_buf, priv->rx_buf_dma);
     }
 
     if (priv->tx_bufs) {
@@ -568,7 +568,7 @@ int bks_ndo_hard_start_xmit(struct sk_buff* skb, struct net_device* dev)
 
     bks_wr32(priv, reg, val);
     val = bks_rd32(priv, reg);
-    printk(KERN_INFO "%s, wrote 0x%08x to register 0x%08x\n", DRV_NAME, val, reg);
+    //printk(KERN_INFO "%s, wrote 0x%08x to register 0x%08x\n", DRV_NAME, val, reg);
 
     priv->tx_back = (idx + 1) % TX_DESCR_CNT;
     if (is_tx_queue_full(priv)) {
