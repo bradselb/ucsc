@@ -88,8 +88,8 @@ struct bks_private {
 
     u16 intr_mask; // the interrupts of interest.
 
-    unsigned int tx_front; // index of the most recently sent tx buf
-    unsigned int tx_back; // index of the least recently sent tx buf
+    unsigned int tx_front; // index into the tx_buf array. remove from front
+    unsigned int tx_back; // index into the tx_buf array. push back
     unsigned char* tx_buf[TX_DESCR_CNT]; // an array of pointers. each one points to the start of a Tx Buffer.
     unsigned char* tx_bufs; // points to a contiguous region large enough for four Tx buffers.
     dma_addr_t tx_bufs_dma;
@@ -356,22 +356,19 @@ int bks_stop_hardware(struct bks_private* priv)
 }
 
 // --------------------------------------------------------------------------
-// since both front and back are initalized to zero, this is not quite correct. 
+// this is not quite correct
 int how_many_bufs_in_tx_queue(struct bks_private* priv)
 {
     int n = TX_DESCR_CNT;
     int count = 0;
-    if (!(0 == priv->tx_front && 0 == priv->tx_back)) {
-        count = ((n + priv->tx_front - priv->tx_back) % n) + 1;
-    }
+    count = (n + priv->tx_back - priv->tx_front) % n;
     return count;
 }
-
 
 // --------------------------------------------------------------------------
 int is_tx_queue_full(struct bks_private* priv)
 {
-    return !(how_many_bufs_in_tx_queue(priv) < TX_DESCR_CNT);
+   return !(how_many_bufs_in_tx_queue(priv) < TX_DESCR_CNT - 1);
 }
 
 // --------------------------------------------------------------------------
@@ -381,16 +378,15 @@ int bks_handle_tx_intr(struct bks_private* priv)
 {
     int handled = 1;
     struct net_device* net_dev = priv->net_dev;
-    unsigned int idx = priv->tx_back; // an index into the tx_buf array
-    int nr_remaining = 0; // how many tx bufs are in the queue
+    unsigned int idx; // an index into the tx_buf array
     unsigned int txstatus = 0;
+    int count = 0;
 
-    nr_remaining = how_many_bufs_in_tx_queue(priv);
-
-    while (0 < nr_remaining) {
+    idx = priv->tx_front % TX_DESCR_CNT;
+    while (0 < how_many_bufs_in_tx_queue(priv)) {
         txstatus = bks_rd32(priv, TxStatus0 + (idx * sizeof(u32)));
 
-        if (!(txstatus & (TxStatusTxComplete)) || !(txstatus & TxStatusOwn)) {
+        if (/*!(txstatus & (TxStatusTxComplete)) ||*/ !(txstatus & TxStatusOwn)) {
             // he's not done with this buffer yet.
             break;
         }
@@ -401,17 +397,15 @@ int bks_handle_tx_intr(struct bks_private* priv)
         }
 
         idx = (idx + 1) % TX_DESCR_CNT;
-        --nr_remaining;
+        priv->tx_front = idx;
+        ++count;
     } // while
 
-    if (priv->tx_back != idx) {
-        // we freed up some buffers in the tx queue
-        priv->tx_back = idx;
-        mb();
-        if (netif_queue_stopped(net_dev)) {
-            printk(KERN_INFO "%s wake TX queue\n", DRV_NAME);
-            netif_wake_queue(net_dev);
-        }
+    mb(); // why? 
+
+    if (count && netif_queue_stopped(net_dev)) {
+        printk(KERN_INFO "%s wake TX queue\n", DRV_NAME);
+        netif_wake_queue(net_dev);
     }
 
     return handled;
@@ -464,8 +458,8 @@ int bks_ndo_open(struct net_device* net_dev)
     // initialize all of the rest of the private data
     // especially the buffer accounting.
     priv->cur_rx = 0;
-    priv->tx_front = 0;
     priv->tx_back = 0;
+    priv->tx_front = 0;
     for (int i=0; i<TX_DESCR_CNT; ++i) {
         priv->tx_buf[i] = &priv->tx_bufs[i * TX_BUF_SIZE];
     }
@@ -521,8 +515,8 @@ int bks_ndo_close(struct net_device* net_dev)
 
 
     // re-set transmit accounting.
-    priv->tx_front = 0;
     priv->tx_back = 0;
+    priv->tx_front = 0;
 
 
     return rc;
@@ -551,7 +545,10 @@ int bks_ndo_hard_start_xmit(struct sk_buff* skb, struct net_device* dev)
         goto exit;
     }
 
-    idx = (priv->tx_front + 1) % TX_DESCR_CNT;
+    spin_lock_irqsave(&priv->lock, flags);
+
+    idx = (priv->tx_back) % TX_DESCR_CNT;
+    priv->tx_back = (idx + 1) % TX_DESCR_CNT;
 
     if (len < ETH_ZLEN) {
         memset(priv->tx_buf[idx], 0, ETH_ZLEN);
@@ -559,8 +556,6 @@ int bks_ndo_hard_start_xmit(struct sk_buff* skb, struct net_device* dev)
 
     skb_copy_and_csum_dev(skb, priv->tx_buf[idx]);
     dev_kfree_skb(skb);
-
-    spin_lock_irqsave(&priv->lock, flags);
 
     wmb();
     reg = TxStatus0 + (idx * sizeof(u32));
@@ -573,10 +568,8 @@ int bks_ndo_hard_start_xmit(struct sk_buff* skb, struct net_device* dev)
 
     bks_wr32(priv, reg, val);
 
-    priv->tx_front = idx;
-
     if (is_tx_queue_full(priv)) {
-        printk(KERN_INFO "%s Tx queue is full.\n", DRV_NAME);
+        printk(KERN_INFO "%s pause TX queue.\n", DRV_NAME);
         netif_stop_queue(dev);
     }
 
