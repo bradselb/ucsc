@@ -4,14 +4,22 @@ RealTek 8139D chip. This chip was chosen based upon availability of the
 manufacturer's data sheet. The card was purchased on Amazon.com (~$10.00).
 The device driver is being developed in two phases. 
 In the first phase of the project, we are to address the basic PCI portion
-of the driver. I have have to admit taking inspiration from the in-tree
-driver, '8139cp.c'. 
-
-Results of the first phase: It works! and makes a lot of noise in the log.
+of the driver. I have have to admit taking considerable inspiration from the
+in-tree driver, '8139too.c'. 
 
 This driver was developed and tested on a couple of old Pentium 4 based
 desktop machines. Both are running Debian 6 with my own custom configured
 and built kernel (Linux-3.0.68). 
+
+Results of the first phase: It works! and makes a lot of noise in the log.
+
+Results of the second phase: When the port is connected to a router, and 
+the module is inserted, the interface does DHCP and gets an address. 
+It still is not fully working - there are many, many Rx Buffer Overflow 
+interrrupts.Also note that I've only tested this after removing the 
+8139too driver...which maybe initializing the card for me before I 
+rmmod that driver and insmod mine. 
+
 
 
 contents:
@@ -21,4 +29,11 @@ contents:
 Makefile:  a makefile that builds the driver. 
 
 README:   this file. 
+
+transcript: a transcript of the bash shell when testing the driver
+            it provides some evidence of what I typed on the command 
+            line and what happened during a brief build & test run. 
+
+dmesg.out: the result of doing dmesg > dmesg.out after the session 
+           documented in the transcript.
 
