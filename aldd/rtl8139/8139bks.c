@@ -120,7 +120,8 @@ static int bks_reset_chip (struct bks_private*);
 static int bks_init_hardware(struct bks_private*);
 static int bks_stop_hardware(struct bks_private*);
 static int is_tx_queue_full(struct bks_private*);
-static int bks_handle_tx_intr(struct bks_private*);
+static int bks_handle_rx_interrupt(struct bks_private*);
+static int bks_handle_tx_interrupt(struct bks_private*);
 
 static int bks_ndo_open(struct net_device* net_dev);
 static int bks_ndo_close(struct net_device* net_dev);
@@ -371,10 +372,71 @@ int is_tx_queue_full(struct bks_private* priv)
    return !(how_many_bufs_in_tx_queue(priv) < TX_DESCR_CNT - 1);
 }
 
+
+
+// --------------------------------------------------------------------------
+int bks_handle_rx_interrupt(struct bks_private* priv)
+{
+    int handled = 1;
+    struct net_device* net_dev = priv->net_dev;
+
+    while (!(bks_rd8(priv, ChipCmd) & RxBufferEmpty)) {
+        // RX Buffer is not empty. 
+        char* rx_buf = priv->rx_buf;
+        unsigned int offset = priv->rx_idx % RX_BUF_SIZE;
+        unsigned int rx_status = 0;
+        unsigned int rx_size = 0;
+        unsigned int pkt_len = 0;
+        struct sk_buff* skb =0;
+
+        rx_status = le32_to_cpu(*(__le32*)(rx_buf + offset));
+        rx_size = (rx_status >> 16) & 0x0ffff; // sixteen bits of status preceed the 16 bit size
+        pkt_len = rx_size - 4; // four bytes preceed the actual packet.
+
+        printk(KERN_INFO "\trx status: 0x%08x, rx size: 0x%04x\n", rx_status, rx_size);
+
+        if (MAX_ETH_FRAME_SIZE < pkt_len || rx_size < 8 || !(rx_status & RxStatusOk)) {
+            // TODO: deal with this untidy condition.
+            goto out;
+        }
+
+        skb = netdev_alloc_skb_ip_align(net_dev, pkt_len);
+        if (likely(skb)) {
+            skb_copy_to_linear_data(skb, &rx_buf[offset + 4], pkt_len);
+            skb_put(skb, pkt_len);
+            skb->protocol = eth_type_trans(skb, net_dev);
+            skb->dev = net_dev;
+            netif_receive_skb(skb);
+        }
+        offset = ((offset + rx_size + 7) & ~3) & 0x0ffff; //??? from 8139too.c ???
+        bks_wr16(priv, RxBufOffset, offset);
+        priv->rx_idx = offset;
+
+        priv->stats.rx_bytes += pkt_len;
+        priv->stats.rx_packets++;
+        if (rx_status & RxStatusMulticastAddr) {
+            priv->stats.multicast++;
+        }
+        if (rx_status & RxStatusCrcError) {
+            priv->stats.rx_crc_errors++;
+        }
+        if (rx_status & RxStatusFrameAlignmentError) {
+            priv->stats.rx_frame_errors++;
+        }
+        if (rx_status & (RxStatusRuntPacket | RxStatusLongPacket)) {
+            priv->stats.rx_length_errors++;
+        }
+    }
+
+out:
+    return handled;
+}
+
+
 // --------------------------------------------------------------------------
 // purpose is mainly to clean up the tx buffers and fix up the accounting. 
 // it is assumed that the caller holds the spinlock when this fctn is called. 
-int bks_handle_tx_intr(struct bks_private* priv)
+int bks_handle_tx_interrupt(struct bks_private* priv)
 {
     int handled = 1;
     struct net_device* net_dev = priv->net_dev;
@@ -537,7 +599,7 @@ int bks_ndo_hard_start_xmit(struct sk_buff* skb, struct net_device* dev)
     unsigned int val = 0;
     
 
-    printk(KERN_INFO "%s ndo_hard_start_xmit()\n", DRV_NAME);
+    //printk(KERN_INFO "%s ndo_hard_start_xmit()\n", DRV_NAME);
 
     if (unlikely(TX_BUF_SIZE < len)) {
         dev_kfree_skb(skb);
@@ -795,11 +857,11 @@ irqreturn_t bks_interrupt(int irq, void* dev_id)
 
     // spurious interrrupt?
     if ((0xffff == intr_stat) || (0 == intr_stat)) {
-        handled = 0;
+        handled = intr_stat & 1;
         goto exit;
     }
     
-    printk(KERN_INFO "%s intr status: 0x%04x\n", DRV_NAME, intr_stat);
+    //printk(KERN_INFO "%s intr status: 0x%04x\n", DRV_NAME, intr_stat);
 
     // grab the lock and hold it for the entire duration of this fctn.
     spin_lock(&priv->lock);
@@ -816,17 +878,25 @@ irqreturn_t bks_interrupt(int irq, void* dev_id)
     }
     
     // receive interrupt? 
-    if (intr_stat & (RxOK | RxBufferOverflow | RxFifoOverflow)) {
+    if (intr_stat & RxOK) {
         // deal with received packet.
-        ack |= (intr_stat & (RxOK | RxBufferOverflow | RxFifoOverflow));
+        printk(KERN_INFO "%s rx ok interrupt.\n", DRV_NAME);
+        ack |= (intr_stat & RxOK);
+        handled = bks_handle_rx_interrupt(priv);
+    }
+
+    //TODO: we get a lot of Rx Buffer Overflow interrupts! 
+    if (intr_stat & (RxBufferOverflow | RxFifoOverflow)) {
+        ack |= (intr_stat & (RxBufferOverflow | RxFifoOverflow));
         handled = 1;
     }
 
     // transmit complete interrupt?
     if (intr_stat & (TxOK | TxError)) {
         // deal with transmission.
+        //printk(KERN_INFO "%s tx interrupt.\n", DRV_NAME);
         ack |= (intr_stat & (TxOK | TxError));
-        handled = bks_handle_tx_intr(priv);
+        handled = bks_handle_tx_interrupt(priv);
     }
 
     // ack all the interrupts that were serviced

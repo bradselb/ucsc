@@ -12,10 +12,10 @@ enum RegisterNames {
     TxAddr0 = 0x0020, // four 32 bit registers. Each holds the start address of the respective Tx buffer.
     RxBufStartAddr = 0x0030, // receive buffer start address register.
     ChipCmd = 0x0037, // command register
-    RxBufPtr = 0x0038, // the present position in the rx buffer? 
-    RxByteCount = 0x003A, // others call is RxBufAddr...but data sheet says it is a byte count?
+    RxBufOffset = 0x0038, // the present position in the rx buffer? 
+    RxByteCount = 0x003A, // aka RxBufAddr...apparently, this is where the device is in the rx buffer? 
     IntrMask = 0x003c, // interrrupt mask register
-    IntrStatus = 0x003E, // interrupt status
+    IntrStatus = 0x003E, // interrupt status register
     TxConfig = 0x0040, 
     RxConfig = 0x0044, 
     TimerCount = 0x0048, // a counter/timer that counts up from zero. Reads clear it.
@@ -81,6 +81,20 @@ enum TxStatusBits {
     TxStatusTxAbort = (1<<30),
     TxStatusCarrierSenseLost = (1<<31),
     TxStatusTxComplete = (TxStatusTxOk | TxStatusTxAbort), 
+};
+
+// sixteen bits of RX status is prepended to the received packet
+enum RxStatusBits {
+    RxStatusOk = (1<<0),
+    RxStatusFrameAlignmentError = (1<<1),
+    RxStatusCrcError = (1<<2),
+    RxStatusLongPacket = (1<<3),
+    RxStatusRuntPacket = (1<<4),
+    RxStatusInvalidSymbolError = (1<<5),
+    RxStatusReserved = (0x7f<<6),
+    RxStatusBroadcastAddr = (1<<13),
+    RxStatusPhysicalAddr = (1<<14),
+    RxStatusMulticastAddr = (1<<15),
 };
 
 #endif // !defined RTL8139BKS_H
