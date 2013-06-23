@@ -1,0 +1,38 @@
+Brad Selbrede
+Linux System Programming
+Chapter 2
+
+File and File IO
+
+Assignment Questions
+
+
+2.1 Write a simple program to count the number of chars, words and lines in an
+    ASCII text file – as a simple implementation of the wc utility.
+
+2.2 Write a simple program 
+  a) to read the contents of one or more ASCII text file(s), and print it out.
+     as a simple implementation of the cat utility.
+
+  b) modify a above to take the -l argument, that prints out each line prefixed
+     by line# in the file.
+
+2.3 Determine the limit of maximum number of open files, using sysconf().
+
+2.4 Write a simple program to redirect both -- stdin and stdout, to files 
+  a) stdin to read from a file, 
+
+  b) stdout “echoes” stdin, and,
+
+  c) stderr to display #lines copied.
+
+2.5 Write a simple program that is a simple version of the ls utility. 
+  a) list the names of all files in the current working directory.
+
+Extra Credit
+  b) Modify 2.5 to take a command line argument. If the argument is a filename
+  list only the filename. If the argument is a directory name, list the
+  directory name followed by the contents of the directory.
+
+  c) Modify tthe program in 2.5b to accapt command line options. add support
+     for the -l, long listing, option flag. 
