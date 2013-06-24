@@ -34,5 +34,5 @@ Extra Credit
   list only the filename. If the argument is a directory name, list the
   directory name followed by the contents of the directory.
 
-  c) Modify tthe program in 2.5b to accapt command line options. add support
+  c) Modify the program in 2.5b to accept command line options. add support
      for the -l, long listing, option flag. 

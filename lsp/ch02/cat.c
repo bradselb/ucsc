@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Copyright (C) 2013 Bradley K. Selbrede - all rights reserved.
+// 
+
+
 // a program that copies the contents of files to stdout. 
 // a simplified version of the cat utility.
 // uses fgets() and kinda assumes that the file is plain 
