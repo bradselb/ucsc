@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h> 
+#include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h>
 
@@ -20,10 +22,11 @@
 
 
 static void list_directory(const char* name, int show_details);
-static void list_file(const char* name, int show_details);
+static void list_file(const char* dirname, const char* filename, int show_details);
 static char* encode_permissions(mode_t m);
 
 
+// ---------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
 
@@ -40,7 +43,7 @@ int main(int argc, char* argv[])
         i0 = 2; // keep track of the fact that we consumed one cmd line arg.
     } 
 
-printf("argc: %d, i0: %d, details: %d, arg: %s\n", argc, i0, details, argv[i0]);
+    //printf("argc: %d, i0: %d, details: %d, arg: %s\n", argc, i0, details, argv[i0]);
 
     if (1 == argc || (2 == argc && details)) {
         // no path and no filename on cmd line so, 
@@ -63,7 +66,8 @@ printf("argc: %d, i0: %d, details: %d, arg: %s\n", argc, i0, details, argv[i0]);
 }
 
 
-// a helper function
+// ---------------------------------------------------------------------------
+//
 static void list_directory(const char* name, int show_details)
 {
     struct stat st;
@@ -71,44 +75,67 @@ static void list_directory(const char* name, int show_details)
     struct dirent* dirent;
     int rc;
 
-    rc = stat(name, &st);
-    if (rc < 0) {
+    if (!name) {
+        fprintf(stderr, "No such file or directory.\n");
+    } else if ((rc = stat(name, &st)) < 0) {
         // bogus filename or path.
-        fprintf(stderr, "cannot access '%s'. No such file or directory.\n");
+        fprintf(stderr, "cannot access '%s'. No such file or directory.\n", name);
     } else if (S_ISDIR(st.st_mode)) {
         if (0 != (dir = opendir(name))) {
             // success!
+            printf("%s\n", name); // show the dirname 
+            // followed by the contents of the dir. 
             while (0 != (dirent = readdir(dir))) {
-                list_file(dirent->d_name, show_details);
+                list_file(name, dirent->d_name, show_details);
             }
             closedir(dir);
         } else {
             // could not open that dir for some reason.
+            fprintf(stderr, "failed to open '%s'\n", name);
         }
     } else if (S_ISREG(st.st_mode)) {
         // name is the name of a regular file.
-        list_file(name, show_details);
+        list_file(name, name, show_details);
     }
 }
 
-// and another...
-static void list_file(const char* name, int show_details)
+// ---------------------------------------------------------------------------
+//
+static void list_file(const char* dirname, const char* filename, int show_details)
 {
     struct stat st;
     int rc;
+    char* path = 0;
 
-    if (name && *name != '.') {
-        rc = stat(name, &st);
-        printf("(%s:%d) %s(),  stat(%s) returned: %d\n", __FILE__, __LINE__, __FUNCTION__, name, rc);
+    if (dirname) {
+        int pathsize;
+        pathsize = strnlen(dirname, 1024) + strnlen(filename, 256) + 4; // totally arbitrary limits
+        path = malloc(pathsize);
+        memset(path, 0, pathsize);
+        strcpy(path, dirname);
+        strcat(path, "/"); // just incase user did not end dirname with trailing slash
+        strcat(path, filename);
+    }
+
+    if (filename && *filename != '.') {
+        rc = stat(path, &st);
+        //printf("(%s:%d) %s(),  stat(%s) returned: %d\n", __FILE__, __LINE__, __FUNCTION__, filename, rc);
         if (show_details && !rc) {
-            printf("%s %ld %ld %s\n",encode_permissions(st.st_mode), st.st_uid, st.st_gid, name);
+            char ts[40];
+            memset(ts, 0, sizeof ts);
+            strftime(ts, sizeof ts, "%e %b %H:%M", localtime(&st.st_mtime));
+            printf("%s %ld %ld %ld %s %s\n",encode_permissions(st.st_mode), 
+                    st.st_uid, st.st_gid, st.st_size, ts, filename);
         } else {
-            printf("%s\n", name);
+            printf("%s\n", filename);
         }
     }
+
+    if (path) free(path);
 }
 
 
+// ---------------------------------------------------------------------------
 char* encode_permissions(mode_t m)
 {
     static char buf[12];
