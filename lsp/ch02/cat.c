@@ -56,7 +56,7 @@ int main(int argc, char** argv)
                         printf("%s", buf);
                     }
                 }
-                close(file);
+                fclose(file);
             }
         } // else its a filename 
 

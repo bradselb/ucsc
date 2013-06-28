@@ -125,7 +125,7 @@ static void list_file(const char* dirname, const char* filename, int show_detail
             memset(ts, 0, sizeof ts);
             strftime(ts, sizeof ts, "%e %b %H:%M", localtime(&st.st_mtime));
             printf("%s %ld %ld %ld %s %s\n",encode_permissions(st.st_mode), 
-                    st.st_uid, st.st_gid, st.st_size, ts, filename);
+                    (long)st.st_uid, (long)st.st_gid, st.st_size, ts, filename);
         } else {
             printf("%s\n", filename);
         }
