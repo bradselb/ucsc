@@ -1,4 +1,4 @@
-EXE = ls cat wc
+EXE = ls cat wc get_max_open redirect
 all : $(EXE)
 
 $(EXE) : % : %.c
