@@ -12,7 +12,8 @@ Brad Selbrede
    2.2. Call "ls –l /bin/ls"
 
 3. Change the above program to call "/bin/ps -f". 
-   Did the pid show up in your output.
+   Q: Did the pid show up in your output?
+   A: Yes! 
 
 4. Use sysconf() to determine the limit of maximum number of forked processes.
 
