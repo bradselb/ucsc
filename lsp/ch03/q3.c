@@ -8,7 +8,7 @@
 
 // Brad Selbrede
 // Linux System Programing, Summer 2013
-// Assignment #2, question #3
+// Assignment #3, question #3
 // 3. Change the above program to call "/bin/ps -f". 
 //    Q: Did the pid show up in your output?
 //    A: Yes! 

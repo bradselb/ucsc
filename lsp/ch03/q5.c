@@ -8,7 +8,7 @@
 
 // Brad Selbrede
 // Linux System Programing, Summer 2013
-// Assignment #2, question #5
+// Assignment #3, question #5
 // Write a simple program that prints "Hello World" in the 
 // background five times on a 10 second interval.
 // this is a gratuitous re-use of q2.c

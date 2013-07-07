@@ -8,7 +8,7 @@
 
 // Brad Selbrede
 // Linux System Programing, Summer 2013
-// Assignment #2, question #2
+// Assignment #3, question #2
 // 2. Write a simple program to print the program's name and pid.
 //   2.1. Call "/bin/ls"....I guess that this means, to fork and exec /bin/ls
 //   2.2. Call "ls –l /bin/ls" .. .again, I assume that this means to fork and exec
