@@ -6,17 +6,23 @@ Assignment Questions
 Brad Selbrede
 
 1. Write a simple program to print the PATH environment variable on your system.
+==> see program, "show_path.c"
 
 2. Write a simple program to print the program's name and pid.
    2.1. Call "/bin/ls".
    2.2. Call "ls –l /bin/ls"
+==> see program, "q2.c" 
 
 3. Change the above program to call "/bin/ps -f". 
    Q: Did the pid show up in your output?
-   A: Yes! 
+   A: Yes!
+==> see program "q3.c"
 
 4. Use sysconf() to determine the limit of maximum number of forked processes.
+note, this parameter is not configured by default on my system.
+==>see program "get_max_children.c"
 
 5. Write a simple program that prints "Hello World" in the background
    five times on a 10 second interval.
+==> see program "q5.c"
 

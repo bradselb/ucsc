@@ -37,7 +37,7 @@ int main(int argc, char* argv[], char* env[])
     } else {
         // successfully started a child process
         child = pid; // save this child's pid so that we can wait for it later.
-        printf("successfully created child process (pid: %ld)\n", child);
+        printf("successfully created child process (pid: %d)\n", child);
         //sleep(1); // poor man's process synchronization.
     }
 
