@@ -1,0 +1,11 @@
+Chapter 4
+
+Threads
+
+Assignment Questions
+
+1. Modify the simple program from Chapter 3 assignment that prints “Hello World”
+   in the background to use 2 threads in a loop 5 times with a sleep 10 secs.
+
+2. Modify the word count assignment from Chapter 2 assignment to count characters,
+   words and lines individually as a thread, and print the output from main().
