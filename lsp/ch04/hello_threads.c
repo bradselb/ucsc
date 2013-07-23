@@ -2,7 +2,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
-//#include <unistd.h>
+#include <unistd.h>
 //#include <sys/types.h>
 //#include <sys/wait.h>
 #include <pthread.h>
@@ -30,7 +30,7 @@ const char* message = "Hello, World!";
 
 int main(int argc, char* argv[], char* env[])
 {
-    int rc;
+    //int rc;
     int nr_threads_started;
     int i;
     pthread_t thread[nr_threads_to_start];
