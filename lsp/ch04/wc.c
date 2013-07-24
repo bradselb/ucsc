@@ -9,22 +9,27 @@
 #include <ctype.h> // isspace()
 
 /* word_couunt.c
- * a simple program to count the characters, words and lines in a text file. 
- * this is meant to be a simplified approximation of the 'wc' system utility.
- * additionally, this is a academic example of the use of pthreads. I do not
- * think one would actually choose to use threads in this case but, the 
- * word count problem does lend itself nicely to the present task.
+ * a not-so-simple program to count the characters, words and lines in a text
+ * file.  This is meant to perform somhing like the 'wc' system utility.
+ * This implementation is an  academic example of the use of pthreads. I do not
+ * think one would actually choose to use threads to solve this problem.
+ *
+ * There are two threads. They share a common data structure - a character 
+ * oriented ring buffer. The main thread opens the file named on the command
+ * line, reads it in a charachter at a time and puts the characters into the
+ * buffer that is shared between the two threads. The worker thread pulls
+ * characters from the buffer and keeps count of lines, words and characters.
+ * Threaded programs always seem to place the burden upon the shared data
+ * structure and that is certainly the case in this otherwise trivial excercise.
+ * the only other slightly interesting issue that was faced is getting the 
+ * termination right. The worker thread needs to be given the chance to complete
+ * processing of all of the characters in the queue. 
  *
  * usage: 
- *   word_count <path>
- *
- * intent: 
- *   open the file named on the command line and read a chunk of data from it.
- *   for each chunk, 
- *     iterate over each character
- *     classify each character and keep count of each type of character.
- *     use a simple state machine to facilitate word counts.
- *     any sequence of non-whitespace characters is counted as a word.
+ *   wc  <path> [buffer size>]
+ *      - the required first argument is the file to be processed 
+ *      - the second argument is optional, it can be used to set the internal 
+ *        buffer length 
  */
 
 
