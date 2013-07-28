@@ -4,5 +4,6 @@
 *.tgz
 *.tar
 *.bz2
-*.gzip
-
+*.gz
+tags
+.tmp_versions
