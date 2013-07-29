@@ -11,10 +11,10 @@
 
 
 // --------------------------------------------------------------------------
-void do_cmd(char* buf, int len, int linenum);
+void do_cmd(char* buf, int len);
 int parse_cmd(char* buf, char** vbuf, int argcount);
-int builtin_cmd(char** argv, int linenum);
-int process_cmd(char** argv, int linenum);
+int builtin_cmd(char** argv);
+int exec_cmd(char** argv);
 int printwaitstatus(FILE* wfp, int pid, int st);
 
 // --------------------------------------------------------------------------
@@ -43,9 +43,8 @@ int printwaitstatus(FILE* wfp, int pid, int st)
 
 // --------------------------------------------------------------------------
 // returns: non-zero if this argv is a built-in command.
-int builtin_cmd(char** argv, int linenum)
+int builtin_cmd(char** argv)
 {
-
     int st;
     int rc = 0;
 
@@ -55,11 +54,11 @@ int builtin_cmd(char** argv, int linenum)
     } else if (0 == strncmp(argv[0], "cd", 2)) {
         rc = 1;
         if (argv[1] && (0 != (st = chdir(argv[1])))) {
-            fprintf(stderr, "ERR: \"cd\" to '%s' failed! (%d)\n", argv[1], linenum);
+            fprintf(stderr, "failed to change directory to '%s'\n", argv[1]);
             rc = -1;
         }
-    } else if (0 == strcmp(argv[0],"hello")) {
-        fprintf(stderr,"\nHello! from process %d. (%d)\n", getpid(), linenum);
+    } else if (0 == strncmp(argv[0], "hello", 5)) {
+        fprintf(stderr, "\nHello! from process %d\n", getpid());
         rc = 1;
     }
 
@@ -68,21 +67,20 @@ int builtin_cmd(char** argv, int linenum)
 
 
 // --------------------------------------------------------------------------
-int process_cmd(char** argv, int linenum)
+int exec_cmd(char** argv)
 {
-
     pid_t pid;
 
     pid = fork();
     if (pid < 0) {
-        fprintf(stderr, "ERR: \"fork\" error! (Line=%d)\n", linenum);
+        fprintf(stderr, "fork() returned: %d\n", pid);
         exit(-1);
     } else if (0 == pid) {
 	// child process
 	int ec;
 	ec = execvp(argv[0], argv);
         if (ec < 0) {
-            fprintf(stderr,"ERR: \"execvp(%s)\" error! (%d)\n", argv[0], linenum);
+            fprintf(stderr, "execvp(%s) returned: %d\n", argv[0], ec);
             _exit(errno);  // terminate the child
         }
     } else {
@@ -93,6 +91,7 @@ int process_cmd(char** argv, int linenum)
     }
     return 0;
 }
+
 
 // --------------------------------------------------------------------------
 int parse_cmd(char* buf, char** vbuf, int n)
@@ -111,14 +110,14 @@ int parse_cmd(char* buf, char** vbuf, int n)
         ++i;
     }
 
-    vbuf[i] = 0;
+    vbuf[i] = 0; // it should already be the case. 
 
     return i;
 }
 
 
 // --------------------------------------------------------------------------
-void do_cmd(char* buf, int bufsize, int linenum)
+void do_cmd(char* buf, int bufsize)
 {
     int i;
     char* vbuf[32];
@@ -128,12 +127,15 @@ void do_cmd(char* buf, int bufsize, int linenum)
     memset(vbuf, 0, sizeof vbuf);
 
     arg_count = parse_cmd(buf, vbuf, max_arg_count - 1);
+    //printf("(%s:%d) %s(),  arg_count: %d\n", __FILE__, __LINE__, __FUNCTION__, arg_count);
 
-    if (builtin_cmd(vbuf, linenum)) {
+    if (arg_count < 1) {
+	; // nothing to do.
+    } else if (builtin_cmd(vbuf)) {
 	; // we're done.
     } else {
 	// an external command
-	process_cmd(vbuf, linenum);
+	exec_cmd(vbuf);
     }
 
     // free the arg list
@@ -147,7 +149,6 @@ void do_cmd(char* buf, int bufsize, int linenum)
 // --------------------------------------------------------------------------
 int main(int argc, char** argv)
 {
-    int linenum;
     char* prompt;
     FILE* rfp;
     char* buf;
@@ -169,13 +170,10 @@ int main(int argc, char** argv)
 	prompt = "";
     }
 
-    linenum = 0;
     rfp = stdin;
     while (fgets(buf, bufsize, rfp)) {
-        ++linenum;
-
         if (*buf) {
-            do_cmd(buf, bufsize, linenum);
+            do_cmd(buf, bufsize);
         }
 
 	if (g_terminate) {
