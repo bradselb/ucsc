@@ -10,7 +10,7 @@
 // 
 
 // ls.c 
-// a short program that is intended to approximate the behaviour of the ls 
+// a function that is intended to approximate the behaviour of the ls 
 // system utility.
 //
 // usage: ls [<options>]  [<path> | <filename>]
@@ -27,7 +27,7 @@ static char* encode_permissions(mode_t m);
 
 
 // ---------------------------------------------------------------------------
-int main(int argc, char* argv[])
+int ls(int argc, char* argv[])
 {
 
     int details; // holds state of '-l' cmd line option
@@ -38,7 +38,7 @@ int main(int argc, char* argv[])
     i0 = 1; // initially, we start looking for cmd line args with argv[1]
     details = 0;
     arg = argv[1]; // note that if argc == 0 then arg == 0
-    if (arg && '-' == arg[0] && 'l' == arg[1]) {
+    if (arg && ('-' == arg[0]) && ('l' == arg[1])) {
         details = 1;
         i0 = 2; // keep track of the fact that we consumed one cmd line arg.
     } 

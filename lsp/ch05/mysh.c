@@ -1,17 +1,20 @@
 #define MYSH_PROMPT "mysh> "
 
 #include <stdlib.h>
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <poll.h> 
 
 // --------------------------------------------------------------------------
-// these fctns are defined in other source files. 
+// these fctns are defined in other source files in this directory. 
 int cat(int argc, char** argv);
+int wc(int argc, char** argv);
+int ls(int argc, char** argv);
 
 // --------------------------------------------------------------------------
 void do_cmd(char* buf, int len);
@@ -22,6 +25,7 @@ int print_wait_status(FILE* wfp, int pid, int st);
 
 // --------------------------------------------------------------------------
 int g_terminate;
+int g_timeout;
 
 // --------------------------------------------------------------------------
 int print_wait_status(FILE* wfp, int pid, int st)
@@ -63,12 +67,16 @@ int is_built_in_cmd(int argc, char** argv)
         }
     } else if  (0 == strncmp(argv[0], "ls", 2)) {
         // list the directory
+        ec = ls(argc, argv);
+        rc = 1;
     } else if  (0 == strncmp(argv[0], "cat", 3)) {
         // cat the files named on the cmd line
         ec = cat(argc, argv);
-        rc = (ec==0);
+        rc = 1;
     } else if  (0 == strncmp(argv[0], "wc", 2)) {
         // count the chars, words and lines
+        ec = wc(argc, argv);
+        rc = 1;
     } else if (0 == strncmp(argv[0], "hello", 5)) {
         // give a friendly greeting.
         fprintf(stderr, "\nHello! from process %d\n", getpid());
@@ -166,40 +174,65 @@ void do_cmd(char* buf, int bufsize)
 int main(int argc, char** argv)
 {
     char* prompt;
-    FILE* rfp;
+    int fd;
     char* buf;
     int bufsize;
+    int nr_read;
+    struct pollfd ps;
+    int poll_rc;
 
-    bufsize = 512;
+    g_timeout = 15000; // fifteen seconds.
+
+    // allcocate an input buffer.
+    bufsize = 4096;
     buf = malloc(bufsize);
     if (!buf) {
         goto out;
     }
 
-    memset(buf, 0, sizeof buf);
+    fd = 0; // we're reading from stdin.
 
-    rfp = stdin;
-    if (isatty(fileno(rfp))) {
+    if (isatty(fd)) {
         prompt = MYSH_PROMPT;
-        fprintf(stderr, "%s", prompt);
+        //fprintf(stderr, "%s", prompt);
     } else {
+        // if not a terminal...do not show a prompt.
         prompt = "";
     }
 
-    rfp = stdin;
-    while (fgets(buf, bufsize, rfp)) {
-        if (*buf) {
-            do_cmd(buf, bufsize);
-        }
+    // set up our poll struct.
+    ps.fd = fd;
+    ps.events = POLLIN;
+    ps.revents = 0;
 
-        if (g_terminate) {
-            break;
-        }
 
+    while (!g_terminate) {
         if (prompt) {
             fprintf(stderr, "%s", prompt);
         }
-    }
+
+        // wait a while for input to be ready.
+        poll_rc = poll(&ps, 1, g_timeout);
+
+        if (0 == poll_rc) {
+            // timed out... ???
+            fprintf(stderr, "poll() timed out\n");
+            continue;
+        } else if (poll_rc < 0) {
+            // an error.
+            perror("poll()");
+            break;
+        } // else 
+          // input fd is ready to be read.
+
+        memset(buf, 0, sizeof buf);
+        nr_read = read(fd, buf, bufsize-1);
+
+        if ((0 < nr_read) && *buf) {
+            do_cmd(buf, bufsize);
+        }
+
+    } // while 
 
 out:
     if (buf) {
