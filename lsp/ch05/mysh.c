@@ -9,19 +9,22 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+// --------------------------------------------------------------------------
+// these fctns are defined in other source files. 
+int cat(int argc, char** argv);
 
 // --------------------------------------------------------------------------
 void do_cmd(char* buf, int len);
 int parse_cmd(char* buf, char** vbuf, int argcount);
-int builtin_cmd(char** argv);
+int is_built_in_cmd(int argc, char** argv);
 int exec_cmd(char** argv);
-int printwaitstatus(FILE* wfp, int pid, int st);
+int print_wait_status(FILE* wfp, int pid, int st);
 
 // --------------------------------------------------------------------------
 int g_terminate;
 
 // --------------------------------------------------------------------------
-int printwaitstatus(FILE* wfp, int pid, int st)
+int print_wait_status(FILE* wfp, int pid, int st)
 {
     fprintf(wfp, "\n");
 
@@ -43,21 +46,31 @@ int printwaitstatus(FILE* wfp, int pid, int st)
 
 // --------------------------------------------------------------------------
 // returns: non-zero if this argv is a built-in command.
-int builtin_cmd(char** argv)
+int is_built_in_cmd(int argc, char** argv)
 {
-    int st;
     int rc = 0;
+    int ec;
 
     if ((0 == strncmp(argv[0], "exit", 4)) || (0 == strncmp(argv[0], "quit", 4))) {
         rc = 1; // yes, this was a built-in. 
         g_terminate = 1;
     } else if (0 == strncmp(argv[0], "cd", 2)) {
+        // change directory.
         rc = 1;
-        if (argv[1] && (0 != (st = chdir(argv[1])))) {
+        if (argv[1] && (0 != (ec = chdir(argv[1])))) {
             fprintf(stderr, "failed to change directory to '%s'\n", argv[1]);
             rc = -1;
         }
+    } else if  (0 == strncmp(argv[0], "ls", 2)) {
+        // list the directory
+    } else if  (0 == strncmp(argv[0], "cat", 3)) {
+        // cat the files named on the cmd line
+        ec = cat(argc, argv);
+        rc = (ec==0);
+    } else if  (0 == strncmp(argv[0], "wc", 2)) {
+        // count the chars, words and lines
     } else if (0 == strncmp(argv[0], "hello", 5)) {
+        // give a friendly greeting.
         fprintf(stderr, "\nHello! from process %d\n", getpid());
         rc = 1;
     } else {
@@ -90,7 +103,7 @@ int exec_cmd(char** argv)
         // parent process
         int st;
         waitpid(pid, &st, 0);
-        // printwaitstatus(stdout, pid, st);
+        // print_wait_status(stdout, pid, st);
     }
     return 0;
 }
@@ -134,8 +147,8 @@ void do_cmd(char* buf, int bufsize)
 
     if (arg_count < 1) {
         ; // nothing to do.
-    } else if (builtin_cmd(vbuf)) {
-        ; // we're done.
+    } else if (is_built_in_cmd(arg_count, vbuf)) {
+        ; // built in cmds are handled.
     } else {
         // an external command
         exec_cmd(vbuf);
