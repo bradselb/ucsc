@@ -1,0 +1,62 @@
+Background:
+-------------------------------------------------------------------------------
+A system contains several long running applications. Each of these writes 
+useful information to a log file. The size of these log files must be actively 
+managed so that they do not fill the disk. A deeply embedded system with very
+limited resources necessitates very aggressive file size management. Log file 
+entries are always time ordered and it is usually the case that the most recent
+are far more valuable than the older entries. Thus, an opportunity exists to 
+actively maintain the filesize of each log file so that it only ever contains 
+the most recent entries. At present, the logrotate facility is used to manage
+log file size. However, this is considered a sub-optimal solution since the 
+facility typically runs at some fixed period - typically, daily. Logrotate
+cannot, for example, prevent a process that is stuck in a tight loop from 
+filling the disk. 
+
+Problem Statement / Objective:
+-------------------------------------------------------------------------------
+Actively limit the size of a log file to some arbitrary number of entries. 
+
+
+Requirements:
+-------------------------------------------------------------------------------
+1) maintain source code compatability with standard library file I/O functions.
+2) only very minimal changes to existing code that uses fprintf(), fputs()...
+3) no need to support read operations. 
+4) arrange entries in reverse chronological order (last written on top).
+
+
+Design:
+-------------------------------------------------------------------------------
+The GNU C library includes a function, "fopencookie() which allows one to 
+create a custom implementation for a standard I/O stream. This implementation 
+can store the stream's data at a location of its own choosing"[1].  The design 
+makes use of the functionality provided by the fopencookie() to store only a 
+predetermined, finite number of log file entries to the file. This is 
+accomplished with the help of an in-memory data structure. A list of strings
+is maintained in memory. Each fprintf() results in a new string being added
+to the list of strings. The number of strings in the list is maintained such
+that there are never more than a specified number of strings in the list. 
+Unfortunately, each client call to fprintf() does not necessarily result in a
+call to the write() callback. This is due to file stream buffering. One
+possible work around is to simply call fflush() on the stream after every 
+fprintf(). 
+
+
+Usage:
+-------------------------------------------------------------------------------
+Usage is briefly demonstrated in the accompanying source file, "demo.c".  In a
+nutshell, one need only include the header file, "rbf.h" and substitute 
+rbfopen() for the C standard library function, fopen().  as mentioned above, 
+file stream buffering frustrates the design intent to a degree. The fflush() 
+workaround is effective.
+
+
+Build: 
+-------------------------------------------------------------------------------
+The supplied makefile builds a library. Client code can link against the library.
+
+
+References:
+-------------------------------------------------------------------------------
+[1] from the fopencookie() man page. 

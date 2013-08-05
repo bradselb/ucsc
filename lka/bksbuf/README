@@ -1,0 +1,106 @@
+This directory contains files subitted by Brad Selbrede in response to 
+Assignment #5 - Accessing Physical memory from a user space program. 
+
+Overview:
+The general idea of the assignment is to use /dev/mem to access some 
+specific physical memory. There are two source code files here. The
+first, 'bksbuf.c' implements a simple kernel module device driver. 
+This module allocates a single page of memory. The write function
+writes to the memory page and read, reads from it. An ioctl is also
+provided which allows the user program to discover the virtual and 
+physical address of the kernel module's memory page. 
+The second source file implements a quick and simple demonstration. 
+The demo program opens the kernel module, writes a short line of 
+text to the kernel module's memory buffer, reads it back and then
+uses the ioctl to dicover the physical address of the module's 
+memory page. The demo program than opens /dev/mem and seeks to 
+the beginning of the kernel module's memory page (using the physical
+address). If the seek is successful, and it is on my ssystem, then
+the demo program again reads the text - but this time, it reads
+it using file descriptor it opened on /dev/mem! The text is again
+printed to the console to show that it was successful. 
+Note that the demo program clears it's own read buffer (with memset)
+before each read - just to show that it really does work! 
+
+There is also a makefile and a dump of the dmesg. 
+
+and finally the following text was cut-pasted from the console and 
+shows a typical run... 
+
+brad@jet:~$ sudo mknod /dev/bksbuf c 251 0 
+[sudo] password for brad: 
+brad@jet:~$ sudo chmod 666 /dev/bksbuf
+brad@jet:~$ cd ucsc-ex/LinuxArch/bksbuf/
+brad@jet:~/ucsc-ex/LinuxArch/bksbuf$ sudo insmod bksbuf.ko
+brad@jet:~/ucsc-ex/LinuxArch/bksbuf$ dmesg | tail -n 20
+[    4.697926] ACPI: Power Button [PWRF]
+[    4.733821] parport_pc 00:09: reported by Plug and Play ACPI
+[    4.733931] parport0: PC-style at 0x378 (0x778), irq 7 [PCSPP,TRISTATE,EPP]
+[    4.783242] input: PC Speaker as /devices/platform/pcspkr/input/input5
+[    4.784859] pci_hotplug: PCI Hot Plug PCI Core version: 0.5
+[    4.793683] shpchp: Standard Hot Plug PCI Controller Driver version: 0.4
+[    6.315969] Adding 877564k swap on /dev/sda5.  Priority:-1 extents:1 across:877564k 
+[    6.634750] EXT3-fs (sda1): using internal journal
+[    6.770344] loop: module loaded
+[    7.497076] kjournald starting.  Commit interval 5 seconds
+[    7.497406] EXT3-fs (sda6): using internal journal
+[    7.497412] EXT3-fs (sda6): mounted filesystem with ordered data mode
+[    8.449845] fuse init (API version 7.17)
+[   10.855642] 8139too 0000:00:0b.0: eth0: link up, 100Mbps, full-duplex, lpa 0x45E1
+[   13.782850] lp0: using parport0 (interrupt-driven).
+[   13.844212] ppdev: user-space parallel port driver
+[   18.222755] sshd (1565): /proc/1565/oom_adj is deprecated, please use /proc/1565/oom_score_adj instead.
+[  107.524194] Disabling lock debugging due to kernel taint
+[  107.524885] bksbuf_init()
+[  107.524892] bksbuf:  driver assigned major number: 251
+brad@jet:~/ucsc-ex/LinuxArch/bksbuf$ ./demo
+now is the time for all good men to come to the aid of their country.
+bksbuf virtual: 0xf4d9c000,  physical: 0x34d9c000
+open("/dev/mem") failed
+: Permission denied
+brad@jet:~/ucsc-ex/LinuxArch/bksbuf$ sudo ./demo
+now is the time for all good men to come to the aid of their country.
+bksbuf virtual: 0xf4daf000,  physical: 0x34daf000
+lseek(4, 0x34daf000) returned: 0x34daf000
+now is the time for all good men to come to the aid of their country.
+brad@jet:~/ucsc-ex/LinuxArch/bksbuf$ dmesg | tail -n 20
+[   13.782850] lp0: using parport0 (interrupt-driven).
+[   13.844212] ppdev: user-space parallel port driver
+[   18.222755] sshd (1565): /proc/1565/oom_adj is deprecated, please use /proc/1565/oom_score_adj instead.
+[  107.524194] Disabling lock debugging due to kernel taint
+[  107.524885] bksbuf_init()
+[  107.524892] bksbuf:  driver assigned major number: 251
+[  195.803582] bksbuf_open()
+[  195.803592] bksbuf: allocated page at virtual: 0xf4d9c000, physical: 0x34d9c000
+[  195.803604] bksbuf_write()
+[  195.803609] bksbuf_read()
+[  195.803768] bksbuf_ioctl(f, 2148063746, 3217674604)
+[  195.803773] bksbuf_ioctl(), dir: 2, type: 218, number: 2, size: 8
+[  195.804279] bksbuf_close()
+[  201.555637] bksbuf_open()
+[  201.555647] bksbuf: allocated page at virtual: 0xf4daf000, physical: 0x34daf000
+[  201.555659] bksbuf_write()
+[  201.555665] bksbuf_read()
+[  201.555886] bksbuf_ioctl(f, 2148063746, 3217618316)
+[  201.555891] bksbuf_ioctl(), dir: 2, type: 218, number: 2, size: 8
+[  201.556605] bksbuf_close()
+brad@jet:~/ucsc-ex/LinuxArch/bksbuf$ sudo rmmod bksbuf
+brad@jet:~/ucsc-ex/LinuxArch/bksbuf$ dmesg > dmesg.txt
+brad@jet:~/ucsc-ex/LinuxArch/bksbuf$ ls -l 
+total 96
+-rw-r--r-- 1 brad brad  6105 Mar 17 14:56 bksbuf.c
+-rw-r--r-- 1 brad brad   546 Mar 17 13:53 bksbuf.h
+-rw-r--r-- 1 brad brad  5940 Mar 17 14:14 bksbuf.ko
+-rw-r--r-- 1 brad brad  1024 Mar 17 14:08 bksbuf.mod.c
+-rw-r--r-- 1 brad brad  2424 Mar 17 14:08 bksbuf.mod.o
+-rw-r--r-- 1 brad brad  4136 Mar 17 14:14 bksbuf.o
+-rwxr-xr-x 1 brad brad  6832 Mar 17 15:22 demo
+-rw-r--r-- 1 brad brad  2110 Mar 17 15:22 demo.c
+-rw-r--r-- 1 brad brad   302 Feb 18 15:18 demo.out
+-rw-r--r-- 1 brad brad 34461 Mar 17 15:34 dmesg.txt
+-rw-r--r-- 1 brad brad   212 Mar 17 13:24 Makefile
+-rw-r--r-- 1 brad brad    53 Mar 17 14:14 modules.order
+-rw-r--r-- 1 brad brad     0 Mar 17 14:08 Module.symvers
+brad@jet:~/ucsc-ex/LinuxArch/bksbuf$ gvim README
+
+

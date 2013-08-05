@@ -1,0 +1,12 @@
+This directory contains code for a simple linux kernel module that demonstrates
+how to use the proc file sysem to provide information to user space. 
+
+To compile this module, simply do make in this directory. 
+Inserting the module creates a file in the the proc file system named '/proc/bks'.
+User land can read this file by simply issuing the command, 'cat /proc/bks'.
+The file contains very basic information about the location, in kernel memory,
+of an array of struct page. The size of this array is also reported. 
+
+This module writes some information about its state and usage to the syslog. 
+This information can be viewed by issuing the command, 'dmesg'. 
+

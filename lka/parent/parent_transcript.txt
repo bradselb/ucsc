@@ -1,0 +1,21 @@
+brad@jet:~/ucsc-ex/LinuxArch/parent$ sudo insmod ./parent.ko
+brad@jet:~/ucsc-ex/LinuxArch/parent$ sudo rmmod parent
+brad@jet:~/ucsc-ex/LinuxArch/parent$ dmesg | tail 
+[54387.799415] bks parent module loaded
+[54387.799422] 3023:'insmod'
+[54387.799425] 3022:'sudo'
+[54387.799428] 2036:'bash'
+[54387.799430] 2031:'sshd'
+[54387.799433] 2023:'sshd'
+[54387.799435] 1549:'sshd'
+[54387.799438] 1:'init'
+[54420.197971] bks parent module unloaded
+brad@jet:~/ucsc-ex/LinuxArch/parent$ ps -ef | egrep "1549|brad|init"
+root         1     0  0 07:27 ?        00:00:01 init [2]  
+root      1549     1  0 07:27 ?        00:00:00 /usr/sbin/sshd
+root      2023  1549  0 21:21 ?        00:00:00 sshd: brad [priv]
+brad      2031  2023  0 21:21 ?        00:00:02 sshd: brad@pts/0 
+brad      2036  2031  0 21:21 pts/0    00:00:00 -bash
+brad      3031  2036  0 22:34 pts/0    00:00:00 ps -ef
+brad      3032  2036  0 22:34 pts/0    00:00:00 egrep 1549|brad|init
+brad@jet:~/ucsc-ex/LinuxArch/parent$ cat > parent_transcript.txt
