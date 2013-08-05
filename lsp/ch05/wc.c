@@ -4,12 +4,12 @@
 #include <fcntl.h> // O_RDONLY flag
 #include <ctype.h> // isalnum()
 
-/* word_couunt.c
- * a simple program to count the characters, words and lines in a text file. 
+/* wc.c
+ * a function to count the characters, words and lines in a text file. 
  * this is meant to be a simplified approximation of the 'wc' system utility.
  *
  * usage: 
- *   word_count <path>
+ *   wc <path>
  *
  * intent: 
  *   open the file named on the command line and read a chunk of data from it.
@@ -23,7 +23,7 @@
 
 
 
-int main(int argc, char** argv)
+int wc(int argc, char** argv)
 {
     int fd = -1;
     int bufsize = 4096;
