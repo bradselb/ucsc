@@ -1,0 +1,8 @@
+In assignment #5, we continue to develop our own shell program. This time we
+are to integrate our versions of the wc, ls and cat commands from previous 
+assignments and make these  "built-in" commands in our shell.  The assinment
+also requres that the input have a timeout of fifteen seconds. 
+I used the poll() function to implement the timeout on stdin. I wasn't 
+sure what to do in case of a timeout so, it simply prints an informatave
+message and prints anew prompt. Bailing out of the shell might also be an 
+appropriate response to timeout. 
