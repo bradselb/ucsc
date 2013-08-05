@@ -1,0 +1,13 @@
+Homework .. 
+
+1. Using semaphores
+	a. Modify your char device driver in Chapter #4. Add mutual exclusion for the copy_from_user() and copy_to_user() functions 
+	   used in the read() and write() methods.
+2. Using spinlocks
+	a. Enhance your character device driver to keep track of the cumulative number of times open() is called.
+	   Use a spinlock to protect accesses to the counter.
+	b. Display “# Opens: <#opens>” in the read-only /proc filesystem entry.
+
+
+What to turn-in: module, C program source and Makefile, Sample Output.
+
