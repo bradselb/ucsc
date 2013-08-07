@@ -1,17 +1,25 @@
 EXE=mysh
-OBJS=mysh.o cat.o ls.o wc.o
+LIB=libmysh.a
+OBJS=mysh.o
+LIBOBJS=cat.o ls.o wc.o
 
 CFLAGS += -Wall -O2
 
-all : $(EXE)
+all : $(EXE) $(LIB)
 
-$(EXE) : $(OBJS)
+# can build the lib independent of the execuatable
+lib : $(LIB)
+
+$(EXE) : $(OBJS) $(LIB)
 	$(CC) -o $@ $^
 
+$(LIB) : $(LIBOBJS)
+	$(AR) r $@ $^
+	# rm $^
 
 %.o : %.c
 	$(CC) -c $(CFLAGS) $<
 
 
 clean :
-	rm -f $(OBJS) $(EXE)  
+	rm -f $(OBJS) $(LIBOBJS) $(LIB) $(EXE)  
