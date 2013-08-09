@@ -14,12 +14,11 @@ $(EXE) : $(OBJS) $(LIB)
 	$(CC) -o $@ $^
 
 $(LIB) : $(LIBOBJS)
-	$(AR) r $@ $^
-	# rm $^
+	$(AR) cr $@ $^
 
 %.o : %.c
 	$(CC) -c $(CFLAGS) $<
 
 
 clean :
-	rm -f $(OBJS) $(LIBOBJS) $(LIB) $(EXE)  
+	@rm -f $(OBJS) $(LIBOBJS) $(LIB) $(EXE)  

@@ -1,0 +1,21 @@
+.TH MYSH 1 "August 2013" "ver 1.1"
+
+.SH NAME
+.IP "mysh - my shell"
+.SH COPYRIGHT
+.IP "mysh is Copyright (C) 2013, Brad Selbrede. All rights reserved."
+.SH SYNOPSIS
+.IP mysh
+.SH DESCRIPTION
+.IP "mysh is a very simple unix shell program. It behaves as one would a very primative unix shell program to behave. It reads commands from standard in and attempts to execute those commands. The mysh program has a few built in commands. As of this writing, mysh handles the following commands as built-in: wc, ls and cat. All other commands are external. The PATH environment variable is consulted when searching for external programs. Finally, please note that the mysh program has a timeout on standard input. That is, the program waits for input on stdin for fifteen seconds and if no input is found after fifteen seconds, it times out...and simply tells the user that it timed out and prints a new prompt." 
+.SH BUILTINS
+.IP "mysh handles cat, ls and wc commands with built-in functions. The implementation of these standard utilities is considerable simplified compared to the standard versions."
+.IP "ls accepts the -l command line option and lists the directory"
+.IP "cat accepts the -l command line option and prints the content of files to the standard output stream. If the -l option is used, each line of output is preceed by a line number."
+.IP "wc counts the lines, words and characters in the file named on the command line." 
+.SH BUGS
+.IP "Please report bugs to the Author."
+.SH AUTHOR
+.IP "Brad Selbrede"
+.SH "SEE ALSO"
+.IP bash(1)
