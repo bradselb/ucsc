@@ -1,5 +1,7 @@
 *.ko
 *.o
+*.a
+*.so
 *.pdf
 *.tgz
 *.tar
