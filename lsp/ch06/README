@@ -1,0 +1,9 @@
+Lesson six covers various useful system tools and several useful approaches 
+to developemnt of software in the large. Topics included sed, the stream 
+editor, creating and working with object libraries, creation of man pages and 
+methods for packging products for distribution. The excercises include 
+producing a simple man page, creating and using an object library and some
+intermediate level make file techniques.
+
+Since most of the source files are carry-over from the previous lesson, they 
+are simply soft linked here. 

@@ -1,0 +1,22 @@
+Excercises:
+6.1 Modify "mysh" (from chapter 5) to include commands "wc", "cat" and "ls"
+    from previous chapter(s), as built-in commands. Each is in a different 
+    file ( .c and .o )
+--- I actually did this in the prev. lesson
+
+6.2 Create a static or dynamic library for these commands.
+--- a static lib containing cat.o, ls.o and wc.o is created by the makefile.
+
+6.3 Create a man page for "mysh" stating the builtin commands. Test it.
+--- the man page is in file "mysh.1"
+
+6.4 Create a makefile to re-create lib archive, or the executable "mysh" as
+    appropriate. Test it.
+--- done.
+
+6.5 Create an rpm for "mysh"
+
+
+6.6 Modify your makefile to add a make rule for creating an rpm for "mysh".
+    Test it. 
+
