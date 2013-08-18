@@ -112,18 +112,11 @@ int do_interactive_loop(int wrfd, int rdfd)
         read_byte_count = read(rdfd, buf, bufsize-1);
         //fprintf(stderr, "%s\n", buf);
 
-        // this parent isn't really paying very close attention to his child. 
-        // it doesn't really matter what the child says - the parent only
-        // does something if the child says it is finished. 
-
-        //if (0 == strncmp(buf, "ok", 2)) {
-        //    // it's all good. 
-        //    continue;
-        //} 
-
-        if (0 == strncmp(buf, "done", 4)) {
+        // If the child doesn't respond in the affirmative, then 
+        // the parent bails out of the interactive loop. 
+        if (0 != strncmp(buf, "aye", 3)) {
             break;
-        }
+        } 
 
     } // while
 
@@ -144,10 +137,9 @@ int do_non_interactive_loop(int rdfd, int wrfd)
     char* buf;
     int bufsize;
     int read_byte_count;
-    int timeout;
-    char reply[] = {"ok"};
+    char ack[] = {"aye"};
+    char nack[] = {"nay"};
 
-    timeout = 500; // half second.
 
     // allcocate an input buffer.
     bufsize = BUFFER_SIZE ;
@@ -180,9 +172,9 @@ int do_non_interactive_loop(int rdfd, int wrfd)
         do_cmd(buf, bufsize);
 
         if (g_terminate) {
-            write(wrfd, "done", 5);
+            write(wrfd, nack, sizeof nack);
         } else {
-            write(wrfd, reply, sizeof reply);
+            write(wrfd, ack, sizeof ack);
         }
 
     } // while
@@ -376,7 +368,6 @@ int main(int argc, char** argv)
         // ---------------------- child -----------------------
         // child is the "server".
         // child receives commands from parent 
-        // and only replies 'ok' or 'done'
         close(parent_to_child[1]); // close the write end of the pipe.
         close(child_to_parent[0]); // close read end. 
 
