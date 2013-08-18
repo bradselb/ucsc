@@ -5,15 +5,15 @@
 #include <ctype.h> // isalnum()
 
 /* wc.c
- * a function to count the characters, words and lines in a text file. 
+ * a function to count the characters, words and lines in a text file.
  * this is meant to be a simplified approximation of the 'wc' system utility.
  *
- * usage: 
+ * usage:
  *   wc <path>
  *
- * intent: 
+ * intent:
  *   open the file named on the command line and read a chunk of data from it.
- *   for each chunk, 
+ *   for each chunk,
  *     iterate over each character
  *     classify each character and keep count of each type of character.
  *     use a simple state machine to facilitate word counts.
@@ -62,12 +62,12 @@ int wc(int argc, char** argv)
     while (0 < (length = read(fd, buf, bufsize))) {
         int i;
         char c;
-        
+
         char_count += length;
 
         for (i=0; i<length; ++i) {
             c = buf[i]; // convenience.
-            
+
             // count lines
             if ('\n' == c) {
                 ++line_count;
@@ -99,7 +99,7 @@ int wc(int argc, char** argv)
                 break;
 
             default:
-                // should never get here. 
+                // should never get here.
                 fprintf(stderr, "Somebody has disturbed the space-time continuum\n");
                 state = INITIAL;
                 break;

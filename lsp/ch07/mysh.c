@@ -9,10 +9,10 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <poll.h> 
+#include <poll.h>
 
 // --------------------------------------------------------------------------
-// these fctns are defined in other source files in this directory. 
+// these fctns are defined in other source files in this directory.
 int cat(int argc, char** argv);
 int wc(int argc, char** argv);
 int ls(int argc, char** argv);
@@ -31,10 +31,15 @@ void sigchild_handler(int);
 sig_atomic_t g_terminate; // parent and child see differnt variables.
 
 // --------------------------------------------------------------------------
+// intent of this was that when the child (server) process exits, the parent
+// whould deal with it cleanly. Problem is that every external command forks
+// and exec's a child too and each of these causes sigchild to be raised when
+// it terminates. So, this doesn't really work as intended. Luckily, it does
+// not appear to be necessary.
 void sigchild_handler(int nr)
 {
     if (nr == SIGCHLD) {
-	//g_terminate = 1;
+        //g_terminate = 1;
     }
 }
 
@@ -61,12 +66,12 @@ int do_interactive_loop(int rdfd, int wrfd)
     }
 
 
-//    if (isatty(rdfd)) {
+    if (isatty(rdfd)) {
         prompt = MYSH_PROMPT;
-//    } else {
+    } else {
         // if not a terminal...do not show a prompt.
-//        prompt = "";
-//    }
+        prompt = "";
+    }
 
     // set up our poll struct.
     ps.fd = rdfd;
@@ -79,32 +84,35 @@ int do_interactive_loop(int rdfd, int wrfd)
             fprintf(stderr, "%s", prompt);
         }
 
-/*
+
         // wait a while for input to be ready.
         poll_rc = poll(&ps, 1, timeout);
 
         if (0 == poll_rc) {
             // timed out... ???
-            fprintf(stderr, "...timed out. Exiting.\n");
+            //fprintf(stderr, "...timed out. Exiting.\n");
             break;
         } else if (poll_rc < 0) {
             // an error.
             perror("poll()");
             break;
-        } // else 
-          // input fd is ready to be read.
-*/
+        } // else
+        // input fd is ready to be read.
+
 
         memset(buf, 0, sizeof buf);
         read_byte_count = read(rdfd, buf, bufsize-1);
 
         if ((0 < read_byte_count) && *buf) {
-	    // instead of doing the command here. just pass the line to the server. 
+            // instead of doing the command here. just pass the line to the server.
             // do_cmd(buf, bufsize);
-	    write(wrfd, buf, read_byte_count);
+            write(wrfd, buf, read_byte_count);
         }
 
-    } // while 
+        // need to evaluate whether the child exited and if it did, then
+        // we also need to exit.
+
+    } // while
 
 out:
     if (buf) {
@@ -136,38 +144,37 @@ int do_non_interactive_loop(int rdfd)
     while (!g_terminate) {
 
         read_byte_count = read(rdfd, buf, bufsize-1);
-	fprintf(stderr, "(%s:%d) %s(), read %d bytes, '%s'\n", 
-	    __FILE__, __LINE__, __FUNCTION__, read_byte_count, buf);
+//fprintf(stderr, "(%s:%d) %s(), read %d bytes, '%s'\n", __FILE__, __LINE__, __FUNCTION__, read_byte_count, buf);
 
 
         if (0 == read_byte_count) {
-	    // we're done here.
-	    break;
-	} 
+            // we're done here.
+            break;
+        }
 
-	if (read_byte_count < 0) {
-	    // an error...
-	    fprintf(stderr, "(%s:%d) %s(), read() returned: %d\n", __FILE__, __LINE__, __FUNCTION__, read_byte_count);
-	    break;
-	}
+        if (read_byte_count < 0) {
+            // an error...
+//fprintf(stderr, "(%s:%d) %s(), read() returned: %d\n", __FILE__, __LINE__, __FUNCTION__, read_byte_count);
+            break;
+        }
 
-	if (0 == *buf) {
-	    // empty line? 
-	    continue;
-	}
-	
-	int ec = do_cmd(buf, bufsize);
-	if (ec) {
-	    // cannot really get here as it is right now
-	    // because, do_external_cmd always returns zero.
-	    // really want an indication that the internal command was 'exit'
-	    fprintf(stderr, "(%s:%d) %s(), do_cmd() returned: %d\n", __FILE__, __LINE__,__FUNCTION__, ec);
+        if (0 == *buf) {
+            // empty line?
+            continue;
+        }
+
+        int ec = do_cmd(buf, bufsize);
+        if (ec) {
+            // cannot really get here as it is right now
+            // because, do_external_cmd always returns zero.
+            // really want an indication that the internal command was 'exit'
+//fprintf(stderr, "(%s:%d) %s(), do_cmd() returned: %d\n", __FILE__, __LINE__,__FUNCTION__, ec);
 
             break;
         }
 
         memset(buf, 0, sizeof buf);
-    } // while 
+    } // while
 
 out:
     if (buf) {
@@ -195,10 +202,10 @@ int do_cmd(char* buf, int bufsize)
     if (arg_count < 1) {
         ; // nothing to do.
     } else if (0 == (rc=do_built_in_cmd(arg_count, arg_list))) {
-	; // successfully handled an internal command
-    } else if (0 == (rc=do_external_cmd(arg_list))){
+        ; // successfully handled an internal command
+    } else if (0 == (rc=do_external_cmd(arg_list))) {
         ; // successfully handled external command
-    } 
+    }
 
     // free the arg list
     for (int i=0; i<arg_count; ++i) {
@@ -222,15 +229,17 @@ int parse_cmd(char* buf, char** args, int n)
     while (token && i < n) {
         len = strlen(token);
         args[i] = malloc(len + 1);
-	if (!args[i]) break; // unlikely.
+        if (!args[i]) {
+            break;    // unlikely.
+        }
         strcpy(args[i], token); // strcpy() copies the terminating zero.
         token = strtok(NULL, delim);
         ++i;
     }
 
-    args[i] = 0; // it should already be the case. 
+    args[i] = 0; // it should already be the case.
 
-    return i; // this is arg_count. 
+    return i; // this is arg_count.
 }
 
 
@@ -244,21 +253,21 @@ int do_built_in_cmd(int argc, char** argv)
 
     rc = 0;
     if ((0 == strncmp(argv[0], "exit", 4)) || (0 == strncmp(argv[0], "quit", 4))) {
-        rc = 0; // yes, this was a built-in. 
+        rc = 0; // yes, this was a built-in.
         g_terminate = 1;
     } else if (0 == strncmp(argv[0], "cd", 2)) {
         // change directory.
         if (argv[1] && (0 != (ec = chdir(argv[1])))) {
             fprintf(stderr, "failed to change directory to '%s'\n", argv[1]);
-            rc = -1; // this internal command failed. 
+            rc = -1; // this internal command failed.
         }
-    } else if  (0 == strncmp(argv[0], "ls", 2)) {
+    } else if (0 == strncmp(argv[0], "ls", 2)) {
         // list the directory
         rc = ls(argc, argv);
-    } else if  (0 == strncmp(argv[0], "cat", 3)) {
+    } else if (0 == strncmp(argv[0], "cat", 3)) {
         // cat the files named on the cmd line
         rc = cat(argc, argv);
-    } else if  (0 == strncmp(argv[0], "wc", 2)) {
+    } else if (0 == strncmp(argv[0], "wc", 2)) {
         // count the chars, words and lines
         rc = wc(argc, argv);
     } else if (0 == strncmp(argv[0], "hello", 5)) {
@@ -281,7 +290,7 @@ int do_external_cmd(char** argv)
     pid = fork();
     if (pid < 0) {
         fprintf(stderr, "(%s:%d) %s(), fork() returned: %d\n", __FILE__, __LINE__, __FUNCTION__ , pid);
-        exit(-1); // hmmm... maybe not? 
+        exit(-1); // hmmm... maybe not?
     } else if (0 == pid) {
         // child process
         int ec;
@@ -328,9 +337,9 @@ int main(int argc, char** argv)
 
     ec = pipe(pipefd);
     if (ec != 0) {
-	fprintf(stderr, "(%s:%d) %s(), pipe() returned: %d [%s]\n", __FILE__,__LINE__, __FUNCTION__, ec, strerror(errno));
-	// perror("pipe");
-	goto OUT;
+        fprintf(stderr, "(%s:%d) %s(), pipe() returned: %d [%s]\n", __FILE__,__LINE__, __FUNCTION__, ec, strerror(errno));
+        // perror("pipe");
+        goto OUT;
     }
 
     // handle the SIGCHLD signal.
@@ -338,34 +347,34 @@ int main(int argc, char** argv)
 
     pid = fork();
     if (0 == pid) {
-	// ---------------------- child -----------------------
-	// child is the "server".
-	// communication is from parent to child
-	// the child does not talk back to parent (until he gets older).
+        // ---------------------- child -----------------------
+        // child is the "server".
+        // communication is from parent to child
+        // the child does not talk back to parent (until he gets older).
 
-	close(pipefd[1]); // close the write end of the pipe.
-	do_non_interactive_loop(pipefd[0]); // read from pipe, and do what the parent says!
-	close(pipefd[0]); // we're done.  close the read end. 
-	_exit(0);
+        close(pipefd[1]); // close the write end of the pipe.
+        do_non_interactive_loop(pipefd[0]); // read from pipe, and do what the parent says!
+        close(pipefd[0]); // we're done.  close the read end.
+        _exit(0);
 
 
 
     } else if (0 < pid) {
-	// ---------------------- parent -----------------------
+        // ---------------------- parent -----------------------
 
-	close(pipefd[0]);// close read end of pipe
+        close(pipefd[0]);// close read end of pipe
 
-	do_interactive_loop(0, pipefd[1]); // read from stdin, write to pipe.
+        do_interactive_loop(0, pipefd[1]); // read from stdin, write to pipe.
 
-	// if we drop out of the interactive loop for any reason, close the write end
-	// of the pipe. This will tell the child that is is time to terminate.
-	close(pipefd[1]);
+        // if we drop out of the interactive loop for any reason, close the write end
+        // of the pipe. This will tell the child that is is time to terminate.
+        close(pipefd[1]);
 
         int st;
         waitpid(pid, &st, 0);
 
     } else { // pid < 0
-	// an error.
+        // an error.
         fprintf(stderr, "(%s:%d) %s(), fork() returned: %d [%s]\n", __FILE__, __LINE__, __FUNCTION__ , pid, strerror(errno));
     }
 

@@ -8,10 +8,10 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <poll.h> 
+#include <poll.h>
 
 // --------------------------------------------------------------------------
-// these fctns are defined in other source files in this directory. 
+// these fctns are defined in other source files in this directory.
 int cat(int argc, char** argv);
 int wc(int argc, char** argv);
 int ls(int argc, char** argv);
@@ -56,7 +56,7 @@ int is_built_in_cmd(int argc, char** argv)
     int ec;
 
     if ((0 == strncmp(argv[0], "exit", 4)) || (0 == strncmp(argv[0], "quit", 4))) {
-        rc = 1; // yes, this was a built-in. 
+        rc = 1; // yes, this was a built-in.
         g_terminate = 1;
     } else if (0 == strncmp(argv[0], "cd", 2)) {
         // change directory.
@@ -65,15 +65,15 @@ int is_built_in_cmd(int argc, char** argv)
             fprintf(stderr, "failed to change directory to '%s'\n", argv[1]);
             rc = -1;
         }
-    } else if  (0 == strncmp(argv[0], "ls", 2)) {
+    } else if (0 == strncmp(argv[0], "ls", 2)) {
         // list the directory
         ec = ls(argc, argv);
         rc = 1;
-    } else if  (0 == strncmp(argv[0], "cat", 3)) {
+    } else if (0 == strncmp(argv[0], "cat", 3)) {
         // cat the files named on the cmd line
         ec = cat(argc, argv);
         rc = 1;
-    } else if  (0 == strncmp(argv[0], "wc", 2)) {
+    } else if (0 == strncmp(argv[0], "wc", 2)) {
         // count the chars, words and lines
         ec = wc(argc, argv);
         rc = 1;
@@ -134,7 +134,7 @@ int parse_cmd(char* buf, char** vbuf, int n)
         ++i;
     }
 
-    vbuf[i] = 0; // it should already be the case. 
+    vbuf[i] = 0; // it should already be the case.
 
     return i;
 }
@@ -222,8 +222,8 @@ int main(int argc, char** argv)
             // an error.
             perror("poll()");
             break;
-        } // else 
-          // input fd is ready to be read.
+        } // else
+        // input fd is ready to be read.
 
         memset(buf, 0, sizeof buf);
         nr_read = read(fd, buf, bufsize-1);
@@ -232,7 +232,7 @@ int main(int argc, char** argv)
             do_cmd(buf, bufsize);
         }
 
-    } // while 
+    } // while
 
 out:
     if (buf) {

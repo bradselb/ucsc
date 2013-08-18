@@ -5,13 +5,13 @@
 #include <errno.h>
 
 // Copyright (C) 2013 Bradley K. Selbrede - all rights reserved.
-// 
+//
 
 
-// a function that copies the contents of files to stdout. 
+// a function that copies the contents of files to stdout.
 // a simplified version of the cat utility.
-// uses fgets() and kinda assumes that the file is plain 
-// text. 
+// uses fgets() and kinda assumes that the file is plain
+// text.
 
 
 int cat(int argc, char** argv)
@@ -34,17 +34,17 @@ int cat(int argc, char** argv)
 
     for (i=1; i<argc; ++i) {
         arg = argv[i];
-        
+
         if ('-' == arg[0]) { // this is a cmd line option
             // iterate over individual chars to accum options
             for (j=1; j<strlen(arg); ++j) {
-                 switch (arg[j]) {
-                    case 'l':
-                        show_line_nr = 1;
-                        break;
-                    default:
-                        break;
-                 } // switch
+                switch (arg[j]) {
+                case 'l':
+                    show_line_nr = 1;
+                    break;
+                default:
+                    break;
+                } // switch
             } // for each option letter
 
         } else { // assume that arg is a filename.
@@ -64,10 +64,12 @@ int cat(int argc, char** argv)
                 } // while not EOF.
                 fclose(file);
             }
-        } // else its a filename 
+        } // else its a filename
     } // for each arg in the cmd line arg list
 
 out:
-    if (buf) free(buf);
+    if (buf) {
+        free(buf);
+    }
     return rc;
 }

@@ -1,24 +1,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h> 
+#include <time.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h>
 
 // Copyright (C) 2013 Bradley K. Selbrede - all rights reserved.
-// 
+//
 
-// ls.c 
-// a function that is intended to approximate the behaviour of the ls 
+// ls.c
+// a function that is intended to approximate the behaviour of the ls
 // system utility.
 //
 // usage: ls [<options>]  [<path> | <filename>]
 // list the content of the directory named by path cmd line argument
 // or, if a file name is given as a command line arg, simply list the filename.
 //
-// options: 
-//    -l : long listing (show the details for each file in dir). 
+// options:
+//    -l : long listing (show the details for each file in dir).
 
 
 static void list_directory(const char* name, int show_details);
@@ -41,12 +41,12 @@ int ls(int argc, char* argv[])
     if (arg && ('-' == arg[0]) && ('l' == arg[1])) {
         details = 1;
         i0 = 2; // keep track of the fact that we consumed one cmd line arg.
-    } 
+    }
 
     //printf("argc: %d, i0: %d, details: %d, arg: %s\n", argc, i0, details, argv[i0]);
 
     if (1 == argc || (2 == argc && details)) {
-        // no path and no filename on cmd line so, 
+        // no path and no filename on cmd line so,
         // just list content of current working dir.
         list_directory("./", details);
     } else {
@@ -54,7 +54,7 @@ int ls(int argc, char* argv[])
 
         // iterate over the remaining cmd line args.
         // assuming that each arg is either a path or filename
-        // figure out which it is and the list the dir or file 
+        // figure out which it is and the list the dir or file
         for (i=i0; i<argc; ++i) {
             arg = argv[i];
             list_directory(arg, details);
@@ -83,8 +83,8 @@ static void list_directory(const char* name, int show_details)
     } else if (S_ISDIR(st.st_mode)) {
         if (0 != (dir = opendir(name))) {
             // success!
-            printf("%s\n", name); // show the dirname 
-            // followed by the contents of the dir. 
+            printf("%s\n", name); // show the dirname
+            // followed by the contents of the dir.
             while (0 != (dirent = readdir(dir))) {
                 list_file(name, dirent->d_name, show_details);
             }
@@ -124,14 +124,16 @@ static void list_file(const char* dirname, const char* filename, int show_detail
             char ts[40];
             memset(ts, 0, sizeof ts);
             strftime(ts, sizeof ts, "%e %b %H:%M", localtime(&st.st_mtime));
-            printf("%s %ld %ld %ld %s %s\n",encode_permissions(st.st_mode), 
-                    (long)st.st_uid, (long)st.st_gid, st.st_size, ts, filename);
+            printf("%s %ld %ld %ld %s %s\n",encode_permissions(st.st_mode),
+                   (long)st.st_uid, (long)st.st_gid, st.st_size, ts, filename);
         } else {
             printf("%s\n", filename);
         }
     }
 
-    if (path) free(path);
+    if (path) {
+        free(path);
+    }
 }
 
 
