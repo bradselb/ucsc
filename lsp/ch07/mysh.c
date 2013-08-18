@@ -18,37 +18,40 @@ int wc(int argc, char** argv);
 int ls(int argc, char** argv);
 
 // --------------------------------------------------------------------------
-int do_interactive_loop(int read_fd, int write_fd);
+int do_interactive_loop(int write_fd, int read_fd);
+int do_non_interactive_loop(int read_fd, int write_fd);
 int do_cmd(char* buf, int len);
 int parse_cmd(char* buf, char** vbuf, int argcount);
 int do_built_in_cmd(int argc, char** argv);
 int do_external_cmd(char** argv);
 int print_wait_status(FILE* wfp, int pid, int st);
 
-void sigchild_handler(int);
+void signal_handler(int);
 
 // --------------------------------------------------------------------------
-sig_atomic_t g_terminate; // parent and child see differnt variables.
+sig_atomic_t g_terminate; // parent and child see different variables.
 
 // --------------------------------------------------------------------------
-// intent of this was that when the child (server) process exits, the parent
-// whould deal with it cleanly. Problem is that every external command forks
-// and exec's a child too and each of these causes sigchild to be raised when
-// it terminates. So, this doesn't really work as intended. Luckily, it does
-// not appear to be necessary.
-void sigchild_handler(int nr)
+// intent:
+// when the user types 'exit' or 'quit' at the prompt, we want both processes
+// to exit cleanly and quickly. In this case, the child (server) process
+// recognizes the exit command and sets the g_terminate global varible in 
+// it's own process address space. That makes it drop out of the 
+// non-interactive-loop. The last thing it does as it is exiting is send 
+// a signal to the parent process indicating that it is time to exit.
+void signal_handler(int nr)
 {
-    if (nr == SIGCHLD) {
-        //g_terminate = 1;
+    if (nr == SIGUSR1) {
+        g_terminate = 1;
     }
 }
 
 
 
 // --------------------------------------------------------------------------
-int do_interactive_loop(int rdfd, int wrfd)
+int do_interactive_loop(int wrfd, int rdfd)
 {
-    char* prompt;
+    char* prompt = 0;
     char* buf;
     int bufsize;
     int read_byte_count;
@@ -56,7 +59,14 @@ int do_interactive_loop(int rdfd, int wrfd)
     struct pollfd ps;
     int poll_rc;
 
-    timeout = 15000; // fifteen seconds.
+    // how long will we wait for a response from the child? 
+    timeout = 15000; // milliseconds.
+
+    // initialize a poll struct so that we can wait for child to respond
+    ps.fd = rdfd;
+    ps.events = POLLIN;
+    ps.revents = 0;
+
 
     // allcocate an input buffer.
     bufsize = BUFFER_SIZE ;
@@ -66,17 +76,9 @@ int do_interactive_loop(int rdfd, int wrfd)
     }
 
 
-    if (isatty(rdfd)) {
+    if (isatty(0)) {
         prompt = MYSH_PROMPT;
-    } else {
-        // if not a terminal...do not show a prompt.
-        prompt = "";
     }
-
-    // set up our poll struct.
-    ps.fd = rdfd;
-    ps.events = POLLIN;
-    ps.revents = 0;
 
 
     while (!g_terminate) {
@@ -84,33 +86,44 @@ int do_interactive_loop(int rdfd, int wrfd)
             fprintf(stderr, "%s", prompt);
         }
 
-
-        // wait a while for input to be ready.
-        poll_rc = poll(&ps, 1, timeout);
-
-        if (0 == poll_rc) {
-            // timed out... ???
-            //fprintf(stderr, "...timed out. Exiting.\n");
-            break;
-        } else if (poll_rc < 0) {
-            // an error.
-            perror("poll()");
-            break;
-        } // else
-        // input fd is ready to be read.
-
-
-        memset(buf, 0, sizeof buf);
-        read_byte_count = read(rdfd, buf, bufsize-1);
+        // read a line of input from the user
+        memset(buf, 0, bufsize);
+        read_byte_count = read(0, buf, bufsize-1);
 
         if ((0 < read_byte_count) && *buf) {
-            // instead of doing the command here. just pass the line to the server.
-            // do_cmd(buf, bufsize);
+            // tell the child
             write(wrfd, buf, read_byte_count);
         }
 
-        // need to evaluate whether the child exited and if it did, then
-        // we also need to exit.
+        // wait a while for child to reply
+        poll_rc = poll(&ps, 1, timeout);
+
+        if (0 == poll_rc) {
+            // timed out.
+            break;
+        } else if (poll_rc < 0) {
+            // an error.
+            fprintf(stderr, "(%s:%d) %s(), pipe() returned: %d [%s]\n", __FILE__, __LINE__, __FUNCTION__ , poll_rc, strerror(errno));
+            break;
+        } // else...
+        // child replied. get the response from child.
+
+        memset(buf, 0, bufsize);
+        read_byte_count = read(rdfd, buf, bufsize-1);
+        //fprintf(stderr, "%s\n", buf);
+
+        // this parent isn't really paying very close attention to his child. 
+        // it doesn't really matter what the child says - the parent only
+        // does something if the child says it is finished. 
+
+        //if (0 == strncmp(buf, "ok", 2)) {
+        //    // it's all good. 
+        //    continue;
+        //} 
+
+        if (0 == strncmp(buf, "done", 4)) {
+            break;
+        }
 
     } // while
 
@@ -119,17 +132,20 @@ out:
         free(buf);
     }
 
+    //fprintf(stderr, "(%s:%d) %s() - bye.\n", __FILE__, __LINE__,__FUNCTION__);
+
     return 0;
 }
 
 
 // --------------------------------------------------------------------------
-int do_non_interactive_loop(int rdfd)
+int do_non_interactive_loop(int rdfd, int wrfd)
 {
     char* buf;
     int bufsize;
     int read_byte_count;
     int timeout;
+    char reply[] = {"ok"};
 
     timeout = 500; // half second.
 
@@ -139,13 +155,12 @@ int do_non_interactive_loop(int rdfd)
     if (!buf) {
         goto out;
     }
-    memset(buf, 0, sizeof buf);
+
 
     while (!g_terminate) {
 
+        memset(buf, 0, bufsize);
         read_byte_count = read(rdfd, buf, bufsize-1);
-//fprintf(stderr, "(%s:%d) %s(), read %d bytes, '%s'\n", __FILE__, __LINE__, __FUNCTION__, read_byte_count, buf);
-
 
         if (0 == read_byte_count) {
             // we're done here.
@@ -154,7 +169,6 @@ int do_non_interactive_loop(int rdfd)
 
         if (read_byte_count < 0) {
             // an error...
-//fprintf(stderr, "(%s:%d) %s(), read() returned: %d\n", __FILE__, __LINE__, __FUNCTION__, read_byte_count);
             break;
         }
 
@@ -163,23 +177,24 @@ int do_non_interactive_loop(int rdfd)
             continue;
         }
 
-        int ec = do_cmd(buf, bufsize);
-        if (ec) {
-            // cannot really get here as it is right now
-            // because, do_external_cmd always returns zero.
-            // really want an indication that the internal command was 'exit'
-//fprintf(stderr, "(%s:%d) %s(), do_cmd() returned: %d\n", __FILE__, __LINE__,__FUNCTION__, ec);
+        do_cmd(buf, bufsize);
 
-            break;
+        if (g_terminate) {
+            write(wrfd, "done", 5);
+        } else {
+            write(wrfd, reply, sizeof reply);
         }
 
-        memset(buf, 0, sizeof buf);
     } // while
 
 out:
     if (buf) {
         free(buf);
     }
+
+    kill(getppid(), SIGUSR1);
+
+    //fprintf(stderr, "(%s:%d) %s() - bye.\n", __FILE__, __LINE__,__FUNCTION__);
 
     return 0;
 }
@@ -197,7 +212,7 @@ int do_cmd(char* buf, int bufsize)
     memset(arg_list, 0, sizeof arg_list);
 
     arg_count = parse_cmd(buf, arg_list, max_arg_count - 1);
-    printf("(%s:%d) %s(),  arg_count: %d\n", __FILE__, __LINE__, __FUNCTION__, arg_count);
+    //printf("(%s:%d) %s(),  arg_count: %d\n", __FILE__, __LINE__, __FUNCTION__, arg_count);
 
     if (arg_count < 1) {
         ; // nothing to do.
@@ -331,44 +346,61 @@ int print_wait_status(FILE* wfp, int pid, int st)
 // --------------------------------------------------------------------------
 int main(int argc, char** argv)
 {
-    int pipefd[2]; // two ends of the pipe.
+    int parent_to_child[2]; // two ends of the pipe.
+    int child_to_parent[2];
     pid_t pid;
     int ec;
 
-    ec = pipe(pipefd);
+    ec = pipe(parent_to_child);
     if (ec != 0) {
         fprintf(stderr, "(%s:%d) %s(), pipe() returned: %d [%s]\n", __FILE__,__LINE__, __FUNCTION__, ec, strerror(errno));
         // perror("pipe");
         goto OUT;
     }
 
-    // handle the SIGCHLD signal.
-    signal(SIGCHLD, sigchild_handler);
+    ec = pipe(child_to_parent);
+    if (ec != 0) {
+        fprintf(stderr, "(%s:%d) %s(), pipe() returned: %d [%s]\n", __FILE__,__LINE__, __FUNCTION__, ec, strerror(errno));
+        close(parent_to_child[0]);
+        close(parent_to_child[1]);
+        // perror("pipe");
+        goto OUT;
+    }
+
+
+    // handle a user signal.
+    signal(SIGUSR1, signal_handler);
 
     pid = fork();
     if (0 == pid) {
         // ---------------------- child -----------------------
         // child is the "server".
-        // communication is from parent to child
-        // the child does not talk back to parent (until he gets older).
+        // child receives commands from parent 
+        // and only replies 'ok' or 'done'
+        close(parent_to_child[1]); // close the write end of the pipe.
+        close(child_to_parent[0]); // close read end. 
 
-        close(pipefd[1]); // close the write end of the pipe.
-        do_non_interactive_loop(pipefd[0]); // read from pipe, and do what the parent says!
-        close(pipefd[0]); // we're done.  close the read end.
+        do_non_interactive_loop(parent_to_child[0], child_to_parent[1]);
+
+        close(parent_to_child[0]); // we're done.  close the read end.
+        close(child_to_parent[1]); // close write end too.
         _exit(0);
-
 
 
     } else if (0 < pid) {
         // ---------------------- parent -----------------------
 
-        close(pipefd[0]);// close read end of pipe
+        close(parent_to_child[0]);// close read end of pipe
+        close(child_to_parent[1]); // close write end. 
 
-        do_interactive_loop(0, pipefd[1]); // read from stdin, write to pipe.
+        do_interactive_loop(parent_to_child[1], child_to_parent[0]);
 
         // if we drop out of the interactive loop for any reason, close the write end
         // of the pipe. This will tell the child that is is time to terminate.
-        close(pipefd[1]);
+        close(parent_to_child[1]);
+        close(child_to_parent[0]); // close read end. 
+
+        //fprintf(stderr, "(%s:%d) %s(), parent waits for child to exit.\n", __FILE__, __LINE__, __FUNCTION__ );
 
         int st;
         waitpid(pid, &st, 0);
