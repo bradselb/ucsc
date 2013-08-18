@@ -1,0 +1,25 @@
+In this homework assignmnet the shell is split into a client and a server.
+The client and server communicate over a pipe. This communication is one-way
+from client to server. The user will interact with the client process via
+the standard input and output streams, which will normally be associated with 
+a terminal so, the clinet process will be the parent of the server.
+
+The division of labor is as follows: 
+
+Client:
+-----------------------------------------------------------------------------
+0. starts the server
+1. output a prompt string
+2. read one line of input
+3. break up the input string into individual tokens. 
+4. pass token list to the server.
+5. wait some short period of time for the server to respond.
+6. print the response from the server to the stadard output.
+7. repeat steps 1-6
+
+
+Server:
+-----------------------------------------------------------------------------
+0. gets started by the client
+
+
