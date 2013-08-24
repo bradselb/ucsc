@@ -26,6 +26,7 @@ int do_built_in_cmd(int argc, char** argv);
 int do_external_cmd(char** argv);
 int print_wait_status(FILE* wfp, int pid, int st);
 
+
 void signal_handler(int);
 
 // --------------------------------------------------------------------------
@@ -361,7 +362,7 @@ int main(int argc, char** argv)
 
 
     // handle a user signal.
-    signal(SIGUSR1, signal_handler);
+    //signal(SIGUSR1, signal_handler);
 
     pid = fork();
     if (0 == pid) {
@@ -375,6 +376,8 @@ int main(int argc, char** argv)
 
         close(parent_to_child[0]); // we're done.  close the read end.
         close(child_to_parent[1]); // close write end too.
+
+
         _exit(0);
 
 
@@ -393,6 +396,7 @@ int main(int argc, char** argv)
 
         //fprintf(stderr, "(%s:%d) %s(), parent waits for child to exit.\n", __FILE__, __LINE__, __FUNCTION__ );
 
+        
         int st;
         waitpid(pid, &st, 0);
 
