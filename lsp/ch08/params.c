@@ -18,13 +18,11 @@ struct params
     int help;
     int debug;
 
-    const char* config_file_name;
     const char* log_file_name;
-    const char* pid_file_name;
 
 };
 
-static const char* short_options = "pihdc:l:r:";
+static const char* short_options = "pihdl:";
 static struct option long_options[] = {
     {.val='p', .name="pipe", .has_arg=no_argument, .flag=0},
     {.val='i', .name="sysv", .has_arg=no_argument, .flag=0},
@@ -32,14 +30,9 @@ static struct option long_options[] = {
     {.val='h', .name="help", .has_arg=no_argument, .flag=0},
     {.val='d', .name="debug", .has_arg=no_argument, .flag=0},
 
-    {.val='c', .name="cf", .has_arg=required_argument, .flag=0},
-    {.val='c', .name="config-file", .has_arg=required_argument, .flag=0},
-
     {.val='l', .name="lf", .has_arg=required_argument, .flag=0},
     {.val='l', .name="log-file", .has_arg=required_argument, .flag=0},
 
-    {.val='r', .name="pf", .has_arg=required_argument, .flag=0},
-    {.val='r', .name="pid-file", .has_arg=required_argument, .flag=0},
     {0,0,0,0}
 };
 
@@ -56,7 +49,6 @@ struct params* alloc_params(void)
     params = malloc(sizeof(struct params));
     if (params != 0) {
         memset(params, 0, sizeof *params);
-        // set up defaults 
         params->pipe = 1;
     }
     return params;
@@ -86,25 +78,55 @@ out:
     return rc;
 }
 
+
 // --------------------------------------------------------------------------
 int update_params_with_opt(struct params* params, int opt, const char* arg)
 {
     int rc = 0;
-
-    if (!params) {
-        rc = -1;
-        goto out;
-    }
-    
+   
     printf("option: %c", opt);
     if (arg) {
         printf(", value: %s", arg);
     }
     printf("\n");
 
+    if (!params) {
+        rc = -1;
+        goto out;
+    }
+ 
+    switch (opt) {
+        case 'p':
+            params->pipe = 1;
+            params->sysv = 0;
+            break;
+
+        case 'i':
+            params->sysv = 1;
+            params->pipe = 0;
+            break;
+
+        case 'h':
+            params->help = 1;
+            break;
+
+        case 'd':
+            params->debug = 1;
+            break;
+
+        case 'l':
+            params->log_file_name = arg;
+            break;
+
+        default:
+            // getopt_long() will print an error message
+            break;
+    }
+
 out:
     return rc;
 }
+
 
 // --------------------------------------------------------------------------
 void free_params(struct params* params)
@@ -151,17 +173,6 @@ int is_debug_enabled(struct params* params)
 
 
 // --------------------------------------------------------------------------
-const char* config_file_name(struct params* params)
-{
-    const char* name = 0;
-    if (params) {
-        name = params->config_file_name;
-    }
-    return name;
-}
-
-
-// --------------------------------------------------------------------------
 const char* log_file_name(struct params* params)
 {
     const char* name = 0;
@@ -171,15 +182,5 @@ const char* log_file_name(struct params* params)
     return name;
 }
 
-
-// --------------------------------------------------------------------------
-const char* pid_file_name(struct params* params)
-{
-    const char* name = 0;
-    if (params) {
-        name = params->pid_file_name;
-    }
-    return name;
-}
 
 

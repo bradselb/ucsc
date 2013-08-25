@@ -11,10 +11,8 @@ int use_pipe(struct params*);
 int use_sysv_ipc(struct params*);
 int is_help_desired(struct params*);
 
-
-const char* config_file_name(struct params*);
 const char* log_file_name(struct params*);
-const char* pid_file_name(struct params*);
 
 
 #endif //!defined PARAMETERS_H
+
