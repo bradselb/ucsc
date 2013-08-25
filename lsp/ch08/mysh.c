@@ -11,6 +11,9 @@
 #include <sys/wait.h>
 #include <poll.h>
 
+
+#include "params.h"
+
 // --------------------------------------------------------------------------
 // these fctns are defined in other source files in this directory.
 int cat(int argc, char** argv);
@@ -343,6 +346,14 @@ int main(int argc, char** argv)
     int child_to_parent[2];
     pid_t pid;
     int ec;
+
+
+    struct params* params;
+
+    params = alloc_params();
+    extract_params_from_cmdline_options(params, argc, argv);
+    free_params(params);
+    goto OUT;
 
     ec = pipe(parent_to_child);
     if (ec != 0) {

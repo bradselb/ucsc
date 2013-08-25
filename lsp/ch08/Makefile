@@ -1,5 +1,5 @@
 EXE = mysh
-OBJS = mysh.o cat.o ls.o wc.o
+OBJS = mysh.o cat.o ls.o wc.o params.o
 
 CFLAGS += -Wall -O2 -std=gnu99
 
