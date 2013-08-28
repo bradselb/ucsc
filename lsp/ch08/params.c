@@ -83,12 +83,14 @@ out:
 int update_params_with_opt(struct params* params, int opt, const char* arg)
 {
     int rc = 0;
-   
+
+#if defined DEBUG_CMDLINE_OPTIONS
     printf("option: %c", opt);
     if (arg) {
         printf(", value: %s", arg);
     }
     printf("\n");
+#endif
 
     if (!params) {
         rc = -1;
@@ -133,7 +135,6 @@ void free_params(struct params* params)
 {
     if (params != 0) {
         free(params);
-        params = 0;
     }
 }
 

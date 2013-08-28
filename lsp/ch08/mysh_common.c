@@ -14,6 +14,27 @@
 #define MAX_ARGC 1024
 
 // --------------------------------------------------------------------------
+// this function needs to be kept in synch with the parameters accepted in params.c
+void show_help(const char* argv0)
+{
+    printf("Usage: %s [options]\n", argv0);
+    printf("a very basic unix shell written as a homework assignment for the Linux Systems Programming class\n");
+    //printf("\n");
+    //printf("\n");
+    printf("-p, --pipe \t\tuse a pipe in the internal implementation.\n");
+    printf("-i, --ipc, --sysv \tuse a message queue and semaphore in the internal implementation.\n");
+    printf("-h, --help \t\tprint this help message and exit.\n");
+    printf("The --pipe and --ipc options are mutually exclusive. If both options\n");
+    printf("are specified, then the last one on the command line prevails.\n");
+    printf("The internal implementation defaults to --pipe\n");
+    printf("\n");
+}
+
+
+
+
+
+// --------------------------------------------------------------------------
 int do_cmd(char* buf, int bufsize)
 {
     int rc = 0;
@@ -109,6 +130,9 @@ int do_built_in_cmd(int argc, char** argv)
 
     } else if (0 == strncmp(argv[0], "hello", 5)) {
         fprintf(stderr, "Hello! (pid: %d)\n", getpid());
+
+    } else if (0 == strncmp(argv[0], "help", 4)) {
+        fprintf(stderr, "sorry. no help available\n");
 
     } else {
         // this is not an internal command.
