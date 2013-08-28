@@ -112,7 +112,7 @@ int do_built_in_cmd(int argc, char** argv)
 
     rc = 0;
     if ((0 == strncmp(argv[0], "exit", 4)) || (0 == strncmp(argv[0], "quit", 4))) {
-        fprintf(stderr, "good-bye (pid: %d).\n", getpid());
+        //fprintf(stderr, "good-bye (pid: %d).\n", getpid());
         kill(getppid(), SIGUSR1);
 
     } else if (0 == strncmp(argv[0], "cd", 2)) {

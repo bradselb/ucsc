@@ -1,6 +1,3 @@
-#define BUFFER_SIZE 4096
-#define MYSH_PROMPT "mysh> "
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -18,6 +15,11 @@
 
 // this is a hack...fix it.
 extern sig_atomic_t g_terminate;
+
+
+// --------------------------------------------------------------------------
+static int do_interactive_loop(int write_fd, int read_fd);
+static int do_non_interactive_loop(int read_fd, int write_fd);
 
 
 // --------------------------------------------------------------------------
@@ -111,7 +113,7 @@ int do_interactive_loop(int wrfd, int rdfd)
 
 
     // allocate an input buffer.
-    bufsize = BUFFER_SIZE ;
+    bufsize = MYSH_BUFFER_SIZE ;
     buf = malloc(bufsize);
     if (!buf) {
         goto out;
@@ -187,7 +189,7 @@ int do_non_interactive_loop(int rdfd, int wrfd)
 
 
     // allcocate an input buffer.
-    bufsize = BUFFER_SIZE ;
+    bufsize = MYSH_BUFFER_SIZE ;
     buf = malloc(bufsize);
     if (!buf) {
         goto out;

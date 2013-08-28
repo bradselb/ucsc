@@ -1,6 +1,9 @@
 #if !defined MYSH_COMMON_H
 #define MYSH_COMMON_H
 
+#define MYSH_BUFFER_SIZE 4096
+#define MYSH_PROMPT "mysh> "
+
 
 void show_help(const char* argv0);
 

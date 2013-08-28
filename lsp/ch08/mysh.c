@@ -9,6 +9,7 @@
 #include "params.h"
 #include "mysh_common.h"
 #include "mysh_pipe.h"
+#include "mysh_sysv.h"
 
 // --------------------------------------------------------------------------
 // mysh.c 
@@ -50,12 +51,12 @@ int main(int argc, char** argv)
         goto done;
     }
 
-    if (use_pipe(params)) {
-        int rc;
+    int rc;
+    if (use_sysv_ipc(params)) {
+        rc = mysh_implemented_with_sysv_ipc();
+    } else {
         rc = mysh_implemented_with_pipe();
     }
-
-
 
 done:
     free_params(params);
