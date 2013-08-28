@@ -51,11 +51,10 @@ int main(int argc, char** argv)
         goto done;
     }
 
-    int rc;
     if (use_sysv_ipc(params)) {
-        rc = mysh_implemented_with_sysv_ipc();
+        mysh_implemented_with_sysv_ipc();
     } else {
-        rc = mysh_implemented_with_pipe();
+        mysh_implemented_with_pipe();
     }
 
 done:

@@ -1,5 +1,7 @@
 EXE = mysh
-OBJS = mysh.o mysh_common.o mysh_pipe.o mysh_sysv.o cat.o ls.o wc.o params.o
+SOURCES = $(wildcard *.c)
+//OBJS = mysh.o mysh_common.o mysh_pipe.o mysh_sysv.o cat.o ls.o wc.o params.o
+OBJS := $(SOURCES:%.c=%.o)
 
 CFLAGS += -Wall -O2 -std=gnu99
 
