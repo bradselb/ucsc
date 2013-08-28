@@ -1,0 +1,13 @@
+Homework assignment #8 
+The assignment this week was to add support for long command line options 
+and also add a second way for the two processes to communicate. The new 
+method is to use SysV IPC. 
+
+I added support for long comman dline options and did the ground work for 
+the second part but, since there is just one week left of class and I've
+done quite a bit of prior work with SysV message Queues and Shared memory,
+I am going to skip ahead to the last two Homework assignements - which involve
+socket communication. This way, I learn more and get more out of the course. 
+If time permits I will come back and provide an implementationof the main loop
+that uses SysV IPC. 
+
