@@ -5,7 +5,6 @@
 #define MYSH_PROMPT "mysh> "
 
 
-void show_help(const char* argv0);
 
 int do_cmd(char* buf, int len);
 int parse_cmd(char* buf, char** argv);

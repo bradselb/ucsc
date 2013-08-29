@@ -1,0 +1,11 @@
+Assignment #7
+
+7.1 Create sockets based client and server executables. 
+
+7.2 Create a TCP client that will process 'lcd', 'lwc', 'lcat' and 'lls' as 
+    client-side commands, and 'cd', 'wc', 'cat' and 'ls' as server-side commands.
+
+7.3 Implement the 'get' and 'put' commands to get/put a single file, using socket
+    communication.
+
+7.4 Handle other commands server-side appropriately for extra credit.

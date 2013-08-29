@@ -13,24 +13,6 @@
 
 #define MAX_ARGC 1024
 
-// --------------------------------------------------------------------------
-// this function needs to be kept in synch with the parameters accepted in params.c
-void show_help(const char* argv0)
-{
-    printf("Usage: %s [options]\n", argv0);
-    printf("a very basic unix shell written as a homework assignment for the Linux Systems Programming class\n");
-    //printf("\n");
-    //printf("\n");
-    printf("-p, --pipe \t\tuse a pipe in the internal implementation.\n");
-    printf("-i, --ipc, --sysv \tuse a message queue and semaphore in the internal implementation.\n");
-    printf("-h, --help \t\tprint this help message and exit.\n");
-    printf("The --pipe and --ipc options are mutually exclusive. If both options\n");
-    printf("are specified, then the last one on the command line prevails.\n");
-    printf("The internal implementation defaults to --pipe\n");
-    printf("\n");
-}
-
-
 
 
 
