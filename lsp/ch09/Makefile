@@ -1,4 +1,4 @@
-EXE = mysh
+EXE = client
 
 SOURCES = $(wildcard *.c)
 OBJS := $(SOURCES:%.c=%.o)

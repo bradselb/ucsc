@@ -139,8 +139,8 @@ int do_external_cmd(char** argv)
         int ec;
         ec = execvp(argv[0], argv);
         if (ec < 0) {
-            fprintf(stderr, "execvp(%s) returned: %d\n", argv[0], ec);
-            _exit(errno);  // terminate the child
+            fprintf(stderr, "(%s:%d) %s(), execvp(%s) returned: %d\n", __FILE__, __LINE__, __FUNCTION__ , argv[0], ec);
+            _exit(errno);  // terminate the child but, do not mess up parent
         }
 
     } else {

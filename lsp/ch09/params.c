@@ -1,6 +1,7 @@
 
 //#define _GNU_SOURCE
 
+//#define DEBUG_CMDLINE_OPTIONS
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -13,8 +14,8 @@
 // --------------------------------------------------------------------------
 struct params
 {
-    int pipe;
-    int sysv;
+    const char* host_addr;
+    const char* port_nr;
     int help;
     int debug;
 
@@ -22,11 +23,11 @@ struct params
 
 };
 
-static const char* short_options = "pihdl:";
+static const char* short_options = "a:p:hdl:";
 static struct option long_options[] = {
-    {.val='p', .name="pipe", .has_arg=no_argument, .flag=0},
-    {.val='i', .name="sysv", .has_arg=no_argument, .flag=0},
-    {.val='i', .name="ipc", .has_arg=no_argument, .flag=0},
+    {.val='a', .name="host-name", .has_arg=required_argument, .flag=0},
+    {.val='a', .name="ip-address", .has_arg=required_argument, .flag=0},
+    {.val='p', .name="port-number", .has_arg=required_argument, .flag=0},
     {.val='h', .name="help", .has_arg=no_argument, .flag=0},
     {.val='d', .name="debug", .has_arg=no_argument, .flag=0},
 
@@ -49,7 +50,6 @@ struct params* alloc_params(void)
     params = malloc(sizeof(struct params));
     if (params != 0) {
         memset(params, 0, sizeof *params);
-        params->pipe = 1;
     }
     return params;
 }
@@ -98,14 +98,12 @@ int update_params_with_opt(struct params* params, int opt, const char* arg)
     }
  
     switch (opt) {
-        case 'p':
-            params->pipe = 1;
-            params->sysv = 0;
+        case 'a':
+            params->host_addr = arg;
             break;
 
-        case 'i':
-            params->sysv = 1;
-            params->pipe = 0;
+        case 'p':
+            params->port_nr = arg;
             break;
 
         case 'h':
@@ -139,22 +137,25 @@ void free_params(struct params* params)
 }
 
 // --------------------------------------------------------------------------
-int use_pipe(struct params* params)
+const char* hostname(struct params* params)
 {
-    int v;
-    v = (params && params->pipe);
-    return v;
+    const char* name = 0;
+    if (params) {
+        name = params->host_addr;
+    }
+    return name;
 }
 
 
 // --------------------------------------------------------------------------
-int use_sysv_ipc(struct params* params)
+const char* portnumber(struct params* params)
 {
-    int v;
-    v = (params && params->sysv);
-    return v;
+    const char* nr = 0;
+    if (params) {
+        nr = params->port_nr;
+    }
+    return nr;
 }
-
 
 // --------------------------------------------------------------------------
 int is_help_desired(struct params* params)

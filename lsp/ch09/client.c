@@ -5,9 +5,15 @@
 #include <errno.h>
 #include <signal.h>
 
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <arpa/inet.h>
 
 #include "params.h"
 #include "mysh_common.h"
+#include "inet.h"
 
 // --------------------------------------------------------------------------
 // client.c 
@@ -22,7 +28,8 @@
 // during summer quarter 2013.
 // 
 // this content and all of the files in this directory are
-// Copyright (C) 2013, Bradley K. Selbrede, all rights reserved.
+// Copyright (C) 2013, Bradley K. Selbrede
+//
 
 
 
@@ -43,6 +50,15 @@ void signal_handler(int nr)
 int main(int argc, char** argv)
 {
     struct params* params = 0;
+    char* buf;
+    size_t bufsize = 4096;
+    size_t buflen = 0; // how many chars in buf.
+
+    buf = malloc(bufsize);
+    if (!buf) {
+        goto out;
+    }
+    memset(buf, 0, bufsize);
 
 
     signal(SIGUSR1, signal_handler);
@@ -52,11 +68,43 @@ int main(int argc, char** argv)
 
     if (is_help_desired(params)) {
         show_help(argv[0]);
-        goto done;
+        goto out;
     }
 
-done:
+    int sockfd;
+    sockfd = inet_connect(hostname(params), portnumber(params), SOCK_STREAM);
+    if (sockfd < 0) {
+        fprintf(stderr, "failed to connect to remote host.\n");
+        goto out;
+    }
+
+    buflen = 0;
+    buflen += snprintf(buf+buflen, bufsize-buflen, "GET / HTTP/1.0\n");
+    buflen += snprintf(buf+buflen, bufsize-buflen, "\n");
+    buflen += snprintf(buf+buflen, bufsize-buflen, "From: bks62464@gmail.com\n");
+    buflen += snprintf(buf+buflen, bufsize-buflen, "User-Agent: Brad's-client/0.01\n");
+    buflen += snprintf(buf+buflen, bufsize-buflen, "\n");
+
+    fputs(buf, stderr);
+
+    ssize_t count;
+    count = write(sockfd, buf, buflen);
+
+    fprintf(stderr, "wrote %ld byes to the socket\n", count);
+
+    memset(buf, 0 , bufsize);
+    while (0 < (count = read(sockfd, buf, bufsize))) {
+        fprintf(stderr, "%s\n", buf);
+    }
+
+    close(sockfd);
+
+out:
     free_params(params);
+
+    if  (buf) {
+        free(buf);
+    }
 
     return 0;
 }

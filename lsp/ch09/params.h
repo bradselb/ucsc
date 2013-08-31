@@ -7,8 +7,8 @@ struct params* alloc_params(void);
 int extract_params_from_cmdline_options(struct params*, int argc, char* argv[]);
 void free_params(struct params*);
 
-int use_pipe(struct params*);
-int use_sysv_ipc(struct params*);
+const char* hostname(struct params* params);
+const char* portnumber(struct params* params);
 int is_help_desired(struct params*);
 
 const char* log_file_name(struct params*);
