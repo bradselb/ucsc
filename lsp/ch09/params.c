@@ -188,16 +188,22 @@ const char* log_file_name(struct params* params)
 // this function needs to be kept in synch with the parameters
 void show_help(const char* argv0)
 {
+    printf("My client application\n");
+    printf("a very basic remote shell written as a homework assignment for the Linux Systems Programming class\n");
     printf("Usage: %s [options]\n", argv0);
-    printf("a very basic unix shell written as a homework assignment for the Linux Systems Programming class\n");
     //printf("\n");
     //printf("\n");
-    printf("-p, --pipe \t\tuse a pipe in the internal implementation.\n");
-    printf("-i, --ipc, --sysv \tuse a message queue and semaphore in the internal implementation.\n");
-    printf("-h, --help \t\tprint this help message and exit.\n");
-    printf("The --pipe and --ipc options are mutually exclusive. If both options\n");
-    printf("are specified, then the last one on the command line prevails.\n");
-    printf("The internal implementation defaults to --pipe\n");
+    printf("\t-a, --host-name, \tthe network (ipv4) address or name of the server.\n");
+    printf("\t    --ip-address\n");
+    printf("\t-p, --port-number \tthe port number of the server application\n");
+    printf("\t-h, --help \t\tprint this help message and exit.\n");
+    printf("Examples:\n");
+    printf("\tclient --host server.mydomain.org --port 13874\n");
+    printf("\tclient --host localhost --port 12383\n");
+    printf("\tclient --host 192.168.1.147  --port 17628\n");
+    printf("Hints:\n");
+    printf("\tStart the server first.\n");
+    printf("\tBoth client and server must use the same port number\n");
     printf("\n");
 }
 

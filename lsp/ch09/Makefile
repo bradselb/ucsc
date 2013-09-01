@@ -1,11 +1,19 @@
-EXE = client
+SERVER = server
+CLIENT = client
 
 SOURCES = $(wildcard *.c)
-OBJS := $(SOURCES:%.c=%.o)
+OBJECTS = $(SOURCES:%.c=%.o)
+
+CLIENT_OBJ = $(CLIENT).o
+SERVER_OBJ = $(SERVER).o
+
+CLIENT_OBJS = $(filter-out $(SERVER_OBJ), $(OBJECTS))
+SERVER_OBJS = $(filter-out $(CLIENT_OBJ), $(OBJECTS))
+
 
 CFLAGS += -Wall -O2 -std=gnu99 -I../lib
 
-all : lib $(EXE)
+all : $(CLIENT) $(SERVER)
 
 # as a convenience, you can build the lib from here
 # and the lib needs to be built before the exe.
@@ -18,11 +26,15 @@ help:
 	@echo '    lib:     builds the library'
 	@echo '  clean:     deletes all the build products from this directory'
 
-$(EXE) : $(OBJS)
-	$(CC) -o $@ -L../lib $^  -lmysh
+$(CLIENT) : $(CLIENT_OBJS)
+	$(CC) -o $@  $^
+
+$(SERVER) : $(SERVER_OBJS)
+	$(CC) -o $@  $^
 
 %.o : %.c
 	$(CC) -c $(CFLAGS) $<
 
 clean :
-	@rm -f $(OBJS) $(EXE)  
+	@rm -f $(OBJECTS) $(CLIENT) $(SERVER)
+	$(MAKE) -C ../lib $@

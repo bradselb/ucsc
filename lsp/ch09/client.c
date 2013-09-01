@@ -8,11 +8,11 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netdb.h>
-#include <arpa/inet.h>
+//#include <netdb.h>
+//#include <arpa/inet.h>
 
 #include "params.h"
-#include "mysh_common.h"
+//#include "mysh_common.h"
 #include "inet.h"
 
 // --------------------------------------------------------------------------
@@ -30,8 +30,6 @@
 // this content and all of the files in this directory are
 // Copyright (C) 2013, Bradley K. Selbrede
 //
-
-
 
 // --------------------------------------------------------------------------
 sig_atomic_t g_terminate;
@@ -53,6 +51,7 @@ int main(int argc, char** argv)
     char* buf;
     size_t bufsize = 4096;
     size_t buflen = 0; // how many chars in buf.
+    int sockfd = -1;
 
     buf = malloc(bufsize);
     if (!buf) {
@@ -71,7 +70,6 @@ int main(int argc, char** argv)
         goto out;
     }
 
-    int sockfd;
     sockfd = inet_connect(hostname(params), portnumber(params), SOCK_STREAM);
     if (sockfd < 0) {
         fprintf(stderr, "failed to connect to remote host.\n");
@@ -79,27 +77,35 @@ int main(int argc, char** argv)
     }
 
     buflen = 0;
-    buflen += snprintf(buf+buflen, bufsize-buflen, "GET / HTTP/1.0\n");
-    buflen += snprintf(buf+buflen, bufsize-buflen, "\n");
-    buflen += snprintf(buf+buflen, bufsize-buflen, "From: bks62464@gmail.com\n");
-    buflen += snprintf(buf+buflen, bufsize-buflen, "User-Agent: Brad's-client/0.01\n");
-    buflen += snprintf(buf+buflen, bufsize-buflen, "\n");
+    buflen += snprintf(buf+buflen, bufsize-buflen, "GET / HTTP/1.0\r\n");
+    buflen += snprintf(buf+buflen, bufsize-buflen, "\r\n");
+    buflen += snprintf(buf+buflen, bufsize-buflen, "Host: %s\r\n", hostname(params));
+    buflen += snprintf(buf+buflen, bufsize-buflen, "From: bks62464@gmail.com\r\n");
+    buflen += snprintf(buf+buflen, bufsize-buflen, "User-Agent: Brad's-client/0.01\r\n");
+    buflen += snprintf(buf+buflen, bufsize-buflen, "\r\n");
 
     fputs(buf, stderr);
 
     ssize_t count;
     count = write(sockfd, buf, buflen);
 
-    fprintf(stderr, "wrote %ld byes to the socket\n", count);
+    //shutdown(sockfd, SHUT_WR);
+
+    fprintf(stderr, "wrote %ld bytes to the server\n", count);
 
     memset(buf, 0 , bufsize);
     while (0 < (count = read(sockfd, buf, bufsize))) {
-        fprintf(stderr, "%s\n", buf);
+        fprintf(stderr, "read %ld bytes from the server\n", count);
+        fputs(buf, stderr);
+        memset(buf, 0 , bufsize);
     }
 
-    close(sockfd);
 
 out:
+    if (sockfd > 0) {
+        close(sockfd);
+    }
+
     free_params(params);
 
     if  (buf) {
@@ -108,3 +114,5 @@ out:
 
     return 0;
 }
+
+
