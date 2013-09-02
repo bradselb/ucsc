@@ -13,7 +13,7 @@ SERVER_OBJS = $(filter-out $(CLIENT_OBJ), $(OBJECTS))
 
 CFLAGS += -Wall -O2 -std=gnu99 -I../lib
 
-all : $(CLIENT) $(SERVER)
+all : lib $(CLIENT) $(SERVER)
 
 # as a convenience, you can build the lib from here
 # and the lib needs to be built before the exe.
@@ -27,10 +27,10 @@ help:
 	@echo '  clean:     deletes all the build products from this directory'
 
 $(CLIENT) : $(CLIENT_OBJS)
-	$(CC) -o $@  $^
+	$(CC) -o $@ -L../lib $^ -lmysh
 
 $(SERVER) : $(SERVER_OBJS)
-	$(CC) -o $@  $^
+	$(CC) -o $@  -L../lib $^ -lmysh
 
 %.o : %.c
 	$(CC) -c $(CFLAGS) $<

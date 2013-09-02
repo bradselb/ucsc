@@ -8,11 +8,9 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-//#include <sys/socket.h>
-//#include <arpa/inet.h>
-
 
 #include "inet.h"
+#include "mysh_common.h"
 
 sig_atomic_t g_terminate;
 
@@ -31,7 +29,6 @@ int main(int argc, char* argv[])
 {
     int sock;
     int rc;
-    int  len;
     char* buf;
     int bufsize = 4096;
 
@@ -45,7 +42,7 @@ int main(int argc, char* argv[])
     }
     memset(buf, 0, bufsize);
 
-    sock = inet_bind("localhost", "16875");
+    sock = inet_bind("localhost", "56789");
     if (sock < 0) {
         fprintf(stderr, "(%s:%d) %s(), inet_bind() returned: %d\n", __FILE__, __LINE__, __FUNCTION__, sock);
         goto out;
@@ -57,22 +54,14 @@ int main(int argc, char* argv[])
         goto out;
     }
 
-    int peer;
-    peer = inet_accept(sock);
-    if (peer < 0) {
-//        fprintf(stderr, "(%s:%d) %s(), accept() returned: %d\n", __FILE__, __LINE__, __FUNCTION__, peer);
-//        goto out;
-    } else {
-
-
-    len = read(peer, buf, bufsize);
-//    while (!g_terminate && len > 0) {
-        write(peer, buf, len);
-//        memset(buf, 0, bufsize);
-//    }
-
-    close(peer);
-    }
+    while (!g_terminate) {
+        int peer;
+        peer = inet_accept(sock);
+        if (peer > 0) {
+            do_non_interactive_loop(peer, STDERR_FILENO);
+            close(peer);
+        }
+    } // while
 
 out:
     if (sock > 0) {

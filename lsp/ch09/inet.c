@@ -13,7 +13,7 @@
 #include "inet.h"
 
 static const char* DefaultHost = "localhost";
-static const char* DefaultPort = "62900";
+static const char* DefaultPort = "0";
 
 
 // --------------------------------------------------------------------------
@@ -92,6 +92,29 @@ out:
 
 
 // --------------------------------------------------------------------------
+// a server process uses this function to bind it's service to a given 
+// ip address and port number. 
+// The name parameter specifies the hostname or ip address to use and the 
+// port parameter is used to specify which port or service name to bind to. 
+// so, for example, we can say things like...
+//    fd = inet_bind("localhost", "http");
+//    fd = inet_bind("192.168.1.201", "16875");
+// you can call this function with one of the arguments set to "0" to tell
+// and the function will still do the right thing. 
+// So for example, if you say...
+//    fd = inet_bind("0", "16875");
+// it means that you will take incomming connections on any suitable interface
+// I guess, this means that if your machine is multi-homed, it can serve on both
+// interfaces? 
+// you can say someting like: 
+//    fd = inet_bind("localhost", "0");
+// and the function to choose an ephemeral port for your service. You can 
+// use netstat --listen --tcp    or, simply netstat -lt to discover what port
+// was picked for you (TODO: do this programmatically)
+//
+// this function takes the hostname / ip address and port number or service 
+// and returns a socket file descriptor if successful. it returns negative
+// values otherwise. 
 int inet_bind(const char* name, const char* port)
 {
     int sock;
@@ -110,6 +133,14 @@ int inet_bind(const char* name, const char* port)
     // hints.ai_canonname = NULL;
     // hints.ai_addr = NULL;
     // hints.ai_next = NULL;
+
+    if (!name) {
+        name = DefaultHost;
+    }
+
+    if (!port) {
+        port = DefaultPort;
+    }
 
 
     rc = getaddrinfo(name, port, &hints, &addrinfo);

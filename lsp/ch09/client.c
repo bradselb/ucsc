@@ -12,7 +12,7 @@
 //#include <arpa/inet.h>
 
 #include "params.h"
-//#include "mysh_common.h"
+#include "mysh_common.h"
 #include "inet.h"
 
 // --------------------------------------------------------------------------
@@ -48,16 +48,7 @@ void signal_handler(int nr)
 int main(int argc, char** argv)
 {
     struct params* params = 0;
-    char* buf;
-    size_t bufsize = 4096;
-    size_t buflen = 0; // how many chars in buf.
     int sockfd = -1;
-
-    buf = malloc(bufsize);
-    if (!buf) {
-        goto out;
-    }
-    memset(buf, 0, bufsize);
 
 
     signal(SIGUSR1, signal_handler);
@@ -76,30 +67,7 @@ int main(int argc, char** argv)
         goto out;
     }
 
-    buflen = 0;
-    buflen += snprintf(buf+buflen, bufsize-buflen, "GET / HTTP/1.0\r\n");
-    buflen += snprintf(buf+buflen, bufsize-buflen, "\r\n");
-    buflen += snprintf(buf+buflen, bufsize-buflen, "Host: %s\r\n", hostname(params));
-    buflen += snprintf(buf+buflen, bufsize-buflen, "From: bks62464@gmail.com\r\n");
-    buflen += snprintf(buf+buflen, bufsize-buflen, "User-Agent: Brad's-client/0.01\r\n");
-    buflen += snprintf(buf+buflen, bufsize-buflen, "\r\n");
-
-    fputs(buf, stderr);
-
-    ssize_t count;
-    count = write(sockfd, buf, buflen);
-
-    //shutdown(sockfd, SHUT_WR);
-
-    fprintf(stderr, "wrote %ld bytes to the server\n", count);
-
-    memset(buf, 0 , bufsize);
-    while (0 < (count = read(sockfd, buf, bufsize))) {
-        fprintf(stderr, "read %ld bytes from the server\n", count);
-        fputs(buf, stderr);
-        memset(buf, 0 , bufsize);
-    }
-
+    do_interactive_loop(STDIN_FILENO, sockfd);
 
 out:
     if (sockfd > 0) {
@@ -107,10 +75,6 @@ out:
     }
 
     free_params(params);
-
-    if  (buf) {
-        free(buf);
-    }
 
     return 0;
 }
