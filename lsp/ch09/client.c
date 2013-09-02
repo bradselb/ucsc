@@ -67,7 +67,7 @@ int main(int argc, char** argv)
         goto out;
     }
 
-    do_interactive_loop(STDIN_FILENO, sockfd);
+    do_interactive_loop(sockfd);
 
 out:
     if (sockfd > 0) {

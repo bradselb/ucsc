@@ -23,12 +23,11 @@ extern sig_atomic_t g_terminate;
 // directly with this function. The function reads input from the user fd
 // and sends it to the server on the server fd. Then it waits fro a reply from
 // from the server. 
-int do_interactive_loop(int user_fd, int server_fd)
+int do_interactive_loop(int server_fd)
 {
     char* prompt = 0;
     char* buf;
     int bufsize;
-    int read_byte_count;
     int timeout;
     struct pollfd ps;
     int poll_rc;
@@ -63,42 +62,51 @@ int do_interactive_loop(int user_fd, int server_fd)
         }
 
         // read a line of input from the user
-        memset(buf, 0, bufsize);
-        read_byte_count = read(user_fd, buf, bufsize-1);
-
-        if ((1 < read_byte_count) && *buf) {
-            write(server_fd, buf, read_byte_count);
+        if (NULL == fgets(buf, bufsize,stdin)) {
+            break;
         }
+
+        if (0 == strncmp(buf, "exit", 4)  || 0 == strncmp(buf, "quit", 4)) {
+            g_terminate = 1;
+            //break;
+        }
+
+        // what I want to do...
+        // if this command string is a local command, 
+        //     deal with it and continue to top of loop
+        // otherwise...
+        // package the command string into a command message packet
+        // and send the message packet to the server.
+        // then use poll with a timeout (as we do now) to wait a bit for the server to say something
+        // when the server has something to say, read packets...how many? 
+
+
+        // send the command string to the server. 
+        write(server_fd, buf, strnlen(buf, bufsize));
+
 
         // wait a while for server to reply
         poll_rc = poll(&ps, 1, timeout);
 
         if (0 == poll_rc) {
             // timed out.
-            done = 1;
-            //fprintf(stderr, "(%s:%d) %s(), poll() returned: %d [%s]\n", __FILE__, __LINE__, __FUNCTION__ , poll_rc, strerror(errno));
+            //fprintf(stderr, "(%s:%d) %s(), poll() timeout [%s]\n", __FILE__, __LINE__, __FUNCTION__ , poll_rc, strerror(errno));
             break;
         } else if (poll_rc < 0) {
             // an error.
-            done = 1;
             fprintf(stderr, "(%s:%d) %s(), poll() returned: %d [%s]\n", __FILE__, __LINE__, __FUNCTION__ , poll_rc, strerror(errno));
             break;
         } else {
+            ssize_t rc;
             // get the response from server
             memset(buf, 0, bufsize);
-            read_byte_count = read(server_fd, buf, bufsize);
+            rc = read(server_fd, buf, bufsize-1);
             // and give the server's message to the user. 
-            write(user_fd, buf, read_byte_count);
-
-            // If the server says it's time to go...
-            // then we bail out of the interactive loop.
-            if (0 == strncmp(buf, "quit", 3)) {
-                done = 1;
-                g_terminate = 1;
-                break;
+            if (rc > 0) {
+                fprintf(stdout, "%s", buf);
             }
         }
-    }
+    } // while !g_terminate
 
 out:
     if (buf) {
@@ -123,7 +131,7 @@ int do_non_interactive_loop(int client_fd, int log_fd)
     int length;
 
 
-    // allcocate an input buffer.
+    // allocate an input buffer.
     bufsize = MYSH_BUFFER_SIZE ;
     buf = malloc(bufsize);
     if (!buf) {
@@ -157,7 +165,7 @@ out:
         free(buf);
     }
 
-    //kill(getppid(), SIGUSR1);
+    //kill(getpid(), SIGUSR1);
 
 
     return 0;

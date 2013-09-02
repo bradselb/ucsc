@@ -4,7 +4,7 @@
 
 
 // --------------------------------------------------------------------------
-int do_interactive_loop(int user_fd, int server_fd);
+int do_interactive_loop(int server_fd);
 int do_non_interactive_loop(int client_fd, int log_fd);
 
 int do_cmd(char* buf, int len, int fd);
