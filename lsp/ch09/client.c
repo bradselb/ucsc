@@ -30,16 +30,6 @@
 //
 
 
-// --------------------------------------------------------------------------
-sig_atomic_t g_terminate;
-
-// --------------------------------------------------------------------------
-void signal_handler(int nr)
-{
-    g_terminate = 1;
-}
-
-
 
 
 // --------------------------------------------------------------------------
@@ -47,8 +37,6 @@ int main(int argc, char** argv)
 {
     struct params* params = 0;
     int sockfd = -1;
-
-    signal(SIGUSR1, signal_handler);
 
     params = alloc_params();
     extract_params_from_cmdline_options(params, argc, argv);
