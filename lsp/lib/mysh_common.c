@@ -14,6 +14,7 @@
 #define MAX_ARGC 1024
 #define MYSH_PROMPT "mysh> "
 #define MYSH_BUFFER_SIZE 4096
+#define CTRL_D 0x04
 
 
 // --------------------------------------------------------------------------
@@ -32,6 +33,7 @@ int do_interactive_loop(int server_fd)
     bufsize = MYSH_BUFFER_SIZE ;
     buf = malloc(bufsize);
     if (!buf) {
+        kill(getpid(), SIGUSR1);
         goto out;
     }
 
@@ -108,7 +110,7 @@ int do_interactive_loop(int server_fd)
                 rc = read(server_fd, buf, bufsize-1);
                 if (rc > 0) {
                     fprintf(stdout, "%s", buf);
-                    if (buf[rc-1] == 0) {
+                    if (CTRL_D == buf[rc-1]) {
                         done = 1;
                     }
                 } else {
@@ -167,9 +169,9 @@ int do_non_interactive_loop(int client_fd, int log_fd)
         // the output back to the client. 
         do_cmd(buf, bufsize, client_fd);
 
-        // and when that's done we send a little something to 
+        // and when that's done we send a ^D to 
         // tell the client that we're done with this command. 
-        buf[0] = 0;
+        buf[0] = CTRL_D;
         write(client_fd, buf, 1);
     }
 

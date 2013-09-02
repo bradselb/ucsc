@@ -199,7 +199,7 @@ int inet_accept(int sockfd)
 
     peer = accept(sockfd, (struct sockaddr*)&peer_sa, &peer_sa_size);
     if (peer < 0) {
-        fprintf(stderr, "(%s:%d) %s(), accept() returned: %d\n", __FILE__, __LINE__, __FUNCTION__, peer);
+        //fprintf(stderr, "(%s:%d) %s(), accept() returned: %d\n", __FILE__, __LINE__, __FUNCTION__, peer);
     }
 
     return peer;

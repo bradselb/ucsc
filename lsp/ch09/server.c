@@ -13,19 +13,19 @@
 #include "mysh_common.h"
 #include "inet.h"
 
+
+// --------------------------------------------------------------------------
 sig_atomic_t g_terminate;
 
 // --------------------------------------------------------------------------
 void signal_handler(int nr)
 {
-    if (SIGUSR1 == nr || SIGTERM == nr) {
-        g_terminate = 1;
-    }
+    g_terminate = 1;
 }
 
 
 
-
+// --------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
     int sock;
@@ -35,6 +35,8 @@ int main(int argc, char* argv[])
     struct params* params = 0;
     int backlog = 10;
 
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
     signal(SIGUSR1, signal_handler);
 
     params = alloc_params();
@@ -68,8 +70,13 @@ int main(int argc, char* argv[])
         if (peer > 0) {
             do_non_interactive_loop(peer, STDERR_FILENO);
             close(peer);
+        } else {
+            //g_terminate = 1;
+            break;
         }
     } // while
+
+    fprintf(stderr, "good-bye.\n");
 
 out:
     if (sock > 0) {

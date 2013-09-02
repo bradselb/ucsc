@@ -29,17 +29,17 @@
 // Copyright (C) 2013, Bradley K. Selbrede
 //
 
+
 // --------------------------------------------------------------------------
 sig_atomic_t g_terminate;
-
 
 // --------------------------------------------------------------------------
 void signal_handler(int nr)
 {
-    if (nr == SIGUSR1) {
-        g_terminate = 1;
-    }
+    g_terminate = 1;
 }
+
+
 
 
 // --------------------------------------------------------------------------
@@ -47,7 +47,6 @@ int main(int argc, char** argv)
 {
     struct params* params = 0;
     int sockfd = -1;
-
 
     signal(SIGUSR1, signal_handler);
 
