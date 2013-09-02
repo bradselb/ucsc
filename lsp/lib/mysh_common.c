@@ -33,7 +33,6 @@ int do_interactive_loop(int server_fd)
     bufsize = MYSH_BUFFER_SIZE ;
     buf = malloc(bufsize);
     if (!buf) {
-        kill(getpid(), SIGUSR1);
         goto out;
     }
 
