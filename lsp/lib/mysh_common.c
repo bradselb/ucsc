@@ -15,8 +15,6 @@
 #define MYSH_PROMPT "mysh> "
 #define MYSH_BUFFER_SIZE 4096
 
-// this is a hack...fix it.
-extern sig_atomic_t g_terminate;
 
 // --------------------------------------------------------------------------
 // this function implements the interactive loop. That is, the user interacts
@@ -43,7 +41,9 @@ int do_interactive_loop(int server_fd)
     }
 
 
-    while (!g_terminate) {
+    int terminate;
+    terminate = 0;
+    while (!terminate) {
         if (prompt) {
             fprintf(stdout, "%s", prompt);
             fflush(stdout);
@@ -59,7 +59,7 @@ int do_interactive_loop(int server_fd)
         }
 
         if (0 == strncmp(buf, "exit", 4)  || 0 == strncmp(buf, "quit", 4)) {
-            g_terminate = 1;
+            terminate = 1;
         }
 
         // what I want to do...(but am not yet doing)
@@ -95,11 +95,11 @@ int do_interactive_loop(int server_fd)
             if (0 == poll_rc) {
                 // timed out.
                 fprintf(stderr, "(%s:%d) %s(), poll() timeout [%s]\n", __FILE__, __LINE__, __FUNCTION__ , strerror(errno));
-                break;
+                done = 1;
             } else if (poll_rc < 0) {
                 // an error.
                 fprintf(stderr, "(%s:%d) %s(), poll() returned: %d [%s]\n", __FILE__, __LINE__, __FUNCTION__ , poll_rc, strerror(errno));
-                break;
+                done = 1;
             } else {
                 ssize_t rc;
                 
@@ -119,14 +119,12 @@ int do_interactive_loop(int server_fd)
         } // while !done
     } // end local scope
 
-    } // while !g_terminate
+    } // while !terminate
 
 out:
     if (buf) {
         free(buf);
     }
-
-    //fprintf(stderr, "%s(), g_terminate: %d\n", __FUNCTION__, g_terminate);
 
     return 0;
 }

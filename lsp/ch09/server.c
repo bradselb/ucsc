@@ -18,7 +18,7 @@ sig_atomic_t g_terminate;
 // --------------------------------------------------------------------------
 void signal_handler(int nr)
 {
-    if (nr == SIGUSR1) {
+    if (SIGUSR1 == nr || SIGTERM == nr) {
         g_terminate = 1;
     }
 }
