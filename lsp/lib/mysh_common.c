@@ -28,18 +28,6 @@ int do_interactive_loop(int server_fd)
     char* prompt = 0;
     char* buf;
     int bufsize;
-    int timeout;
-    struct pollfd ps;
-    int poll_rc;
-    int done;
-
-    // how long will we wait for a response from the child? 
-    timeout = 10000; // milliseconds.
-
-    // initialize a poll struct so that we can wait for child to respond
-    ps.fd = server_fd;
-    ps.events = POLLIN;
-    ps.revents = 0;
 
 
     // allocate an input buffer.
@@ -62,50 +50,75 @@ int do_interactive_loop(int server_fd)
         }
 
         // read a line of input from the user
-        if (NULL == fgets(buf, bufsize,stdin)) {
+        if (NULL == fgets(buf, bufsize, stdin)) {
             break;
+        }
+
+        if ('\n' == buf[0]) {
+            continue;
         }
 
         if (0 == strncmp(buf, "exit", 4)  || 0 == strncmp(buf, "quit", 4)) {
             g_terminate = 1;
-            //break;
         }
 
-        // what I want to do...
+        // what I want to do...(but am not yet doing)
         // if this command string is a local command, 
         //     deal with it and continue to top of loop
         // otherwise...
-        // package the command string into a command message packet
+        // Package the command string into a command message packet
         // and send the message packet to the server.
-        // then use poll with a timeout (as we do now) to wait a bit for the server to say something
-        // when the server has something to say, read packets...how many? 
+        // Then, use poll with a timeout (as we do now) to wait a bit for the server to say
+        // something. When the server has something to say, read packets...how many? 
 
 
         // send the command string to the server. 
         write(server_fd, buf, strnlen(buf, bufsize));
 
+    { // local scope -- think about refactoring this.
+        int timeout;
+        timeout = 10000; // milliseconds.
 
-        // wait a while for server to reply
-        poll_rc = poll(&ps, 1, timeout);
+        struct pollfd ps;
+        ps.fd = server_fd;
+        ps.events = POLLIN;
+        ps.revents = 0;
 
-        if (0 == poll_rc) {
-            // timed out.
-            //fprintf(stderr, "(%s:%d) %s(), poll() timeout [%s]\n", __FILE__, __LINE__, __FUNCTION__ , poll_rc, strerror(errno));
-            break;
-        } else if (poll_rc < 0) {
-            // an error.
-            fprintf(stderr, "(%s:%d) %s(), poll() returned: %d [%s]\n", __FILE__, __LINE__, __FUNCTION__ , poll_rc, strerror(errno));
-            break;
-        } else {
-            ssize_t rc;
-            // get the response from server
-            memset(buf, 0, bufsize);
-            rc = read(server_fd, buf, bufsize-1);
-            // and give the server's message to the user. 
-            if (rc > 0) {
-                fprintf(stdout, "%s", buf);
-            }
-        }
+        int done;
+        done = 0;
+        while (!done) {
+            int poll_rc;
+
+            // see if the server has something to say.
+            poll_rc = poll(&ps, 1, timeout);
+
+            if (0 == poll_rc) {
+                // timed out.
+                fprintf(stderr, "(%s:%d) %s(), poll() timeout [%s]\n", __FILE__, __LINE__, __FUNCTION__ , strerror(errno));
+                break;
+            } else if (poll_rc < 0) {
+                // an error.
+                fprintf(stderr, "(%s:%d) %s(), poll() returned: %d [%s]\n", __FILE__, __LINE__, __FUNCTION__ , poll_rc, strerror(errno));
+                break;
+            } else {
+                ssize_t rc;
+                
+                // get the response from server
+                memset(buf, 0, bufsize);
+                rc = read(server_fd, buf, bufsize-1);
+                if (rc > 0) {
+                    fprintf(stdout, "%s", buf);
+                    if (buf[rc-1] == 0) {
+                        done = 1;
+                    }
+                } else {
+                    fprintf(stderr, "(%s:%d) %s(), read() returned: %d [%s]\n", __FILE__, __LINE__, __FUNCTION__ , poll_rc, strerror(errno));
+                    done = 1;
+                }
+            } 
+        } // while !done
+    } // end local scope
+
     } // while !g_terminate
 
 out:
@@ -127,46 +140,46 @@ int do_non_interactive_loop(int client_fd, int log_fd)
 {
     char* buf;
     int bufsize;
-    int read_byte_count;
-    int length;
 
 
     // allocate an input buffer.
     bufsize = MYSH_BUFFER_SIZE ;
     buf = malloc(bufsize);
     if (!buf) {
+        kill(getpid(), SIGUSR1);
         goto out;
     }
 
 
     while (1) {
-        int rc;
+        int count;
 
         memset(buf, 0, bufsize);
-        read_byte_count = read(client_fd, buf, bufsize-1);
+        count = read(client_fd, buf, bufsize-1);
 
-        if (read_byte_count <= 0) {
-            fprintf(stderr, "(%s:%d) %s(), read() returned: %d [%s]\n", __FILE__, __LINE__, __FUNCTION__ , read_byte_count, strerror(errno));
+        if (0 == count) {
+            // client hung-up.
+            break;
+        } else if (count < 0) {
+            fprintf(stderr, "(%s:%d) %s(), read() returned: %d [%s]\n", __FILE__, __LINE__, __FUNCTION__ , count, strerror(errno));
             break;
         }
 
         // whomever ends up "doing" the command, gets to write 
-        // it's output back to the client. 
-        rc = do_cmd(buf, bufsize, client_fd);
+        // the output back to the client. 
+        do_cmd(buf, bufsize, client_fd);
 
-        // and when that's done we send an ack. 
-        length = snprintf(buf, bufsize, "OK\n");
-        write(client_fd, buf, length);
+        // and when that's done we send a little something to 
+        // tell the client that we're done with this command. 
+        buf[0] = 0;
+        write(client_fd, buf, 1);
+    }
 
-    } // while
 
 out:
     if (buf) {
         free(buf);
     }
-
-    //kill(getpid(), SIGUSR1);
-
 
     return 0;
 }

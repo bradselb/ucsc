@@ -8,8 +8,6 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-//#include <netdb.h>
-//#include <arpa/inet.h>
 
 #include "params.h"
 #include "mysh_common.h"

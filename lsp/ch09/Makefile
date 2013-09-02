@@ -18,6 +18,8 @@ all : lib $(CLIENT) $(SERVER)
 # as a convenience, you can build the lib from here
 # and the lib needs to be built before the exe.
 lib : 
+	@rm -f $(CLIENT)
+	@rm -f $(SERVER)
 	$(MAKE) -C ../lib $@
 
 help: 

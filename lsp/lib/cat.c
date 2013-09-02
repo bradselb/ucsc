@@ -42,7 +42,7 @@ int cat(int argc, char** argv, int wfd)
         if (rfd < 0) {
             ssize_t len = 0;
             memset(buf, 0, bufsize);
-            len = sprintf(buf, "could not open file named '%s'", arg);
+            len = sprintf(buf, "could not open file named '%s'\n", arg);
             strerror_r(rfd, buf+len, bufsize-len);
             len = strnlen(buf, bufsize);
             write(wfd, buf, len);

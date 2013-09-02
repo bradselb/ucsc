@@ -12,9 +12,6 @@
 
 #include "inet.h"
 
-static const char* DefaultHost = "localhost";
-static const char* DefaultPort = "0";
-
 
 // --------------------------------------------------------------------------
 // a bunch of functions that mostly wrap the usual and customary sockets
@@ -52,12 +49,10 @@ int inet_connect(const char* name, const char* port, int type)
     // hints.ai_addr = NULL;
     // hints.ai_next = NULL;
 
-    if (!name) {
-        name = DefaultHost;
-    }
-
-    if (!port) {
-        port = DefaultPort;
+    if (!name || !port) {
+        fprintf(stderr, "(%s:%d) %s(), invalid args.\n", __FILE__, __LINE__, __FUNCTION__);
+        sock = -1;
+        goto out;
     }
 
     rc = getaddrinfo(name, port, &hints, &addrinfo);
@@ -134,12 +129,10 @@ int inet_bind(const char* name, const char* port)
     // hints.ai_addr = NULL;
     // hints.ai_next = NULL;
 
-    if (!name) {
-        name = DefaultHost;
-    }
-
-    if (!port) {
-        port = DefaultPort;
+    if (!name || !port) {
+        fprintf(stderr, "(%s:%d) %s(), invalid args.\n", __FILE__, __LINE__, __FUNCTION__);
+        sock = -1;
+        goto out;
     }
 
 
@@ -164,7 +157,7 @@ int inet_bind(const char* name, const char* port)
         } else {
             // success!
             struct sockaddr_in* sa = (struct sockaddr_in*)iter->ai_addr;
-            char* host_name = 0;
+            const char* host_name = 0;
             int port_nr = 0;
             char* buf;
             int bufsize = 1024;

@@ -9,8 +9,9 @@
 #include <sys/types.h>
 
 
-#include "inet.h"
+#include "params.h"
 #include "mysh_common.h"
+#include "inet.h"
 
 sig_atomic_t g_terminate;
 
@@ -31,8 +32,13 @@ int main(int argc, char* argv[])
     int rc;
     char* buf;
     int bufsize = 4096;
+    struct params* params = 0;
+    int backlog = 10;
 
     signal(SIGUSR1, signal_handler);
+
+    params = alloc_params();
+    extract_params_from_cmdline_options(params, argc, argv);
 
     sock = -1;
 
@@ -42,17 +48,19 @@ int main(int argc, char* argv[])
     }
     memset(buf, 0, bufsize);
 
-    sock = inet_bind("localhost", "56789");
+    sock = inet_bind(hostname(params), portnumber(params));
     if (sock < 0) {
         fprintf(stderr, "(%s:%d) %s(), inet_bind() returned: %d\n", __FILE__, __LINE__, __FUNCTION__, sock);
         goto out;
     }
 
-    rc = inet_listen(sock, 10);
+    rc = inet_listen(sock, backlog);
     if (rc < 0) {
         fprintf(stderr, "(%s:%d) %s(), listen() returned: %d\n", __FILE__, __LINE__, __FUNCTION__, rc);
         goto out;
     }
+
+    fprintf(stderr, "pid: %d\n", getpid());
 
     while (!g_terminate) {
         int peer;
@@ -71,6 +79,9 @@ out:
     if (buf) {
         free(buf);
     }
+
+    free_params(params);
+
     return 0;
 }
 

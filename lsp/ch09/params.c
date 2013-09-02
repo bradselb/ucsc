@@ -6,10 +6,14 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-
 #include <getopt.h>
 
 #include "params.h"
+
+
+// --------------------------------------------------------------------------
+static const char* DEFAULT_HOST = "0"; // means "any suitable interface"
+static const char* DEFAULT_PORT = "56789";
 
 // --------------------------------------------------------------------------
 struct params
@@ -50,6 +54,8 @@ struct params* alloc_params(void)
     params = malloc(sizeof(struct params));
     if (params != 0) {
         memset(params, 0, sizeof *params);
+        params->host_addr = DEFAULT_HOST;
+        params->port_nr = DEFAULT_PORT;
     }
     return params;
 }
