@@ -7,5 +7,6 @@
 *.tar
 *.bz2
 *.gz
+*.swp
 tags
 .tmp_versions
