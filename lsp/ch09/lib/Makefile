@@ -1,12 +1,15 @@
 LIBNAME = mysh
 LIB = lib$(LIBNAME).a
-SOURCES =
+
 SOURCES = $(wildcard *.c)
 OBJS := $(SOURCES:%.c=%.o)
 
 CFLAGS += -Wall -O2 -std=gnu99
 
-lib : $(LIB)
+
+all : $(LIBNAME)
+
+$(LIBNAME) : $(LIB)
 
 $(LIB) : $(OBJS)
 	$(AR) cr $@ $^
