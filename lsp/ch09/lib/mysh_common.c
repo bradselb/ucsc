@@ -233,10 +233,10 @@ int parse_cmd(char* buf, char** args)
     char* token;
     static const char* delim = " ,\t\n";
     int i = 0;
-    int max_argc = MAX_ARGC;
+    int n = MAX_ARGC - 1; // leave room for NULL at end.
 
     token = strtok(buf, delim);
-    while (token && i < max_argc) {
+    while (token && i < n) {
         size_t len;
 
         len = strlen(token);
