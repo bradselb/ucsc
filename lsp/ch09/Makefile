@@ -30,11 +30,11 @@ help:
 	@echo '    lib:     builds the library'
 	@echo '  clean:     deletes all the build products'
 
-$(CLIENT) : $(CLIENT_OBJS)
-	$(CC) -o $@ -L$(MYLIBDIR) $^ -lmysh
+$(CLIENT) : $(LIBNAME) $(CLIENT_OBJS)
+	$(CC) -o $@ -L$(MYLIBDIR) $(CLIENT_OBJS) -l$<
 
-$(SERVER) : $(SERVER_OBJS)
-	$(CC) -o $@  -L$(MYLIBDIR) $^ -lmysh
+$(SERVER) : $(LIBNAME) $(SERVER_OBJS)
+	$(CC) -o $@ -L$(MYLIBDIR) $(SERVER_OBJS)  -l$<
 
 %.o : %.c
 	$(CC) -c $(CFLAGS) $<

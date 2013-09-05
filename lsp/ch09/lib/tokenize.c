@@ -14,7 +14,7 @@
 // returns the number of tokens in the string.
 // assumes that buf contains a null terminated string. 
 // bufsize should be at least strlen(buf) + 1
-int tokenize(char* buf, size_t bufsize, const char* delims)
+int tokenize(char* buf, size_t bufsize, const char* delims, size_t* token_bufsize)
 {
     int token_count; // how many tokens were found
     char* begin; // points to first char in token
@@ -65,6 +65,10 @@ int tokenize(char* buf, size_t bufsize, const char* delims)
     }
 
 out:
+    if (token_bufsize) {
+        *token_bufsize = total_token_bytes + token_count;
+        //*token_bufsize = bufsize - pad_bytes; // == total_token_bytes + token_count;
+    }
     return token_count;
 }
 
