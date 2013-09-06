@@ -10,7 +10,13 @@
 // pack the tokens back into the buffer. 
 // in essence, this function transforms the contents of buf from a 
 // single null teminated string to a packed array of null terminated
-// strings. the tken strings follow one right after another. 
+// strings. The token strings follow one right after another. 
+// This function is similar to the argz_create_sep() function found in
+// GNU libc with the following exceptions:
+//    1) this function allows multiple delimiters
+//    2) this function modifies the buffer it is passed
+//    3) this function returns the number of tokens found as well as the 
+//       resulting token buffer size (as an out param).
 // returns the number of tokens in the string.
 // assumes that buf contains a null terminated string. 
 // bufsize should be at least strlen(buf) + 1
@@ -80,7 +86,10 @@ out:
 // note: The caller MUST pre-allocate the array, argv such that 
 // the array has space for at least argc+1 pointers. This is because 
 // convention demands that argv[argc] == 0.
-// Caller should also initialize the whole array to zeros. 
+// Caller should also initialize the whole array to zeros.
+// I realize after writing and testing this function that it does essentially
+// the same thing as the agrz_extract() function in glibc although the
+// interfaces are slightly different. 
 int init_argv(char** argv, int argc, const char* buf, size_t bufsize)
 {
     int i;
