@@ -10,6 +10,7 @@
 
 
 #include "mysh_common.h"
+#include "tokenize.h"
 
 #define MAX_ARGC 1024
 #define MYSH_PROMPT "mysh> "
@@ -20,7 +21,7 @@
 // --------------------------------------------------------------------------
 // this function implements the interactive loop. That is, the user interacts
 // directly with this function. The function reads input from the user fd
-// and sends it to the server on the server fd. Then it waits fro a reply from
+// and sends it to the server on the server fd. Then it waits for a reply from
 // from the server. 
 int do_interactive_loop(int server_fd)
 {
@@ -55,27 +56,42 @@ int do_interactive_loop(int server_fd)
             break;
         }
 
+        // blank line? 
         if ('\n' == buf[0]) {
             continue;
         }
 
-        if (0 == strncmp(buf, "exit", 4)  || 0 == strncmp(buf, "quit", 4)) {
-            terminate = 1;
+
+
+    // 
+    {
+        // tokenize the command string in-place
+        const char* delims = " \t\n,;:=";
+        const char* tokbuf = (const char*)buf; // convenient sugar.
+        size_t tokbufsize = 0;
+        int tokcount;
+        //int rc;
+
+
+        tokcount = tokenize(buf, bufsize, delims, &tokbufsize);
+
+        terminate = is_quit_cmd(tokbuf);
+
+        if (is_local_cmd(tokbuf)) {
+            do_local_command(tokbuf, tokbufsize, tokcount);
+            continue;
         }
 
-        // what I want to do...(but am not yet doing)
-        // if this command string is a local command, 
-        //     deal with it and continue to top of loop
-        // otherwise...
-        // Package the command string into a command message packet
-        // and send the message packet to the server.
-        // Then, use poll with a timeout (as we do now) to wait a bit for the server to say
-        // something. When the server has something to say, read packets...how many? 
+        // send the tokenized command string to the server. 
+        write(server_fd, tokbuf, tokbufsize);
 
+        if (is_putfile_cmd(tokbuf)) {
+           //rc = send_file_data(tokbuf, tokbufsize, server_fd);
 
-        // send the command string to the server. 
-        write(server_fd, buf, strnlen(buf, bufsize));
+        } 
+    }
 
+    // get response from server.
     { // local scope -- think about refactoring this.
         int timeout;
         timeout = 10000; // milliseconds.
@@ -183,47 +199,28 @@ out:
     return 0;
 }
 
-
-
+// --------------------------------------------------------------------------
+int is_quit_cmd(const char* buf)
+{
+    int v;
+    v = buf && (0 == strncmp(buf, "exit", 4) || 0 == strncmp(buf, "quit", 4));
+    return v;
+}
 
 // --------------------------------------------------------------------------
-int do_cmd(char* buf, int bufsizey, int fd)
+int is_local_cmd(const char* buf)
 {
-    int rc = 0;
-    int argc;
-    char* argv[MAX_ARGC];
+    int v;
+    v = buf && (0 == strncmp(buf, "local", 5));
+    return v;
+}
 
-
-    if ((buf && *buf == 0)) {
-        rc = 0;
-        goto done;
-    }
-
-
-    memset(argv, 0, sizeof argv);
-
-    argc = parse_cmd(buf, argv);
-
-    if (argc < 1) {
-        rc = 0;
-        goto done;
-    }
-    
-    rc = do_built_in_cmd(argc, argv, fd);
-// not ready yet.
-//    if (1 == rc) {
-//        rc = do_external_cmd(argv, fd);
-//    }
-
-    // free the arg list
-    for (int i=0; i<argc; ++i) {
-        if (argv[i]) {
-            free(argv[i]);
-        }
-    }
-
-done:
-    return rc;
+// --------------------------------------------------------------------------
+int is_putfile_cmd(const char* buf)
+{
+    int v;
+    v = buf && (0 == strncmp(buf, "put", 3));
+    return v;
 }
 
 
@@ -254,11 +251,97 @@ int parse_cmd(char* buf, char** args)
     return i; // this is arg count.
 }
 
+// --------------------------------------------------------------------------
+int do_cmd(char* buf, int bufsizey, int fd)
+{
+    int rc = 0;
+    int argc;
+    char* argv[MAX_ARGC];
+
+
+    if ((buf && *buf == 0)) {
+        rc = 0;
+        goto done;
+    }
+
+
+    memset(argv, 0, sizeof argv);
+
+    argc = parse_cmd(buf, argv);
+
+    if (argc < 1) {
+        rc = 0;
+        goto done;
+    }
+    
+    rc = do_builtin_cmd(argc, argv, fd);
+// not ready yet.
+//    if (1 == rc) {
+//        rc = do_external_cmd(argv, fd);
+//    }
+
+    // free the arg list
+    for (int i=0; i<argc; ++i) {
+        if (argv[i]) {
+            free(argv[i]);
+        }
+    }
+
+done:
+    return rc;
+}
+
+
+// --------------------------------------------------------------------------
+int do_local_command(const char* tokbuf, size_t tokbufsize, int tokcount)
+{
+    int rc;
+    int argc;
+    char** argv;
+
+    rc = -1;
+
+    // need at least two tokens for this to be interesting.
+    if (tokcount < 2) {
+        rc = 0;
+        goto out;
+    }
+
+    // need to make SURE that argv has room for null terminator.
+    argv = malloc((tokcount+1) * sizeof(char*));
+    if (!argv) {
+        rc = -1;
+        goto out;
+    }
+    memset(argv, 0, sizeof argv);
+
+    // convert tokens to argv
+    argc = init_argv_from_tokenbuf(argv, tokbuf, tokbufsize, tokcount);
+    if (argc != tokcount) {
+        // lies!
+        rc = -1;
+        goto out;
+    }
+
+    // keeping in mind that first token is 'local',
+    // doctor up what we say to the do_XXX_cmd() functions.
+    rc = do_builtin_cmd(argc - 1, &argv[1], STDOUT_FILENO);
+    if (0 != rc) {
+        rc = do_external_cmd(&argv[1], STDOUT_FILENO);
+    }
+
+out:
+    if (argv) {
+        free(argv);
+    }
+
+    return rc;
+}
 
 
 // --------------------------------------------------------------------------
 // returns: non-zero if this argv is a built-in command.
-int do_built_in_cmd(int argc, char** argv, int fd)
+int do_builtin_cmd(int argc, char** argv, int fd)
 {
     int rc;
     int ec;
@@ -266,6 +349,7 @@ int do_built_in_cmd(int argc, char** argv, int fd)
     int bufsize = 512;
     int length;
 
+    // a small buffer for a reply message - if necessay. 
     buf = malloc(bufsize);
     if (!buf) {
         rc = -1;
@@ -275,14 +359,16 @@ int do_built_in_cmd(int argc, char** argv, int fd)
 
 
     rc = 0;
-    if ((0 == strncmp(argv[0], "exit", 4)) || (0 == strncmp(argv[0], "quit", 4))) {
-        length = snprintf(buf, bufsize, "quit...OK. Good-bye from pid: %d\n", getpid());
-        write(fd, buf, length);
-        //kill(getpid(), SIGUSR1);
+    length = 0;
+    if (is_quit_cmd(argv[0])) {
+        length = snprintf(buf, bufsize, "%s.  OK. Good-bye from pid: %d\n", argv[0], getpid());
+
+    } else if (0 == strncmp(argv[0], "hello", 5)) {
+        length = snprintf(buf, bufsize, "hello from pid: %d\n", getpid());
 
     } else if (0 == strncmp(argv[0], "cd", 2)) {
         if (argv[1] && (0 != (ec = chdir(argv[1])))) {
-            fprintf(stderr, "failed to change directory to '%s'\n", argv[1]);
+            length = snprintf(buf, bufsize, "failed to change directory to '%s'\n", argv[1]);
         }
     } else if (0 == strncmp(argv[0], "ls", 2)) {
         ls(argc, argv, fd);
@@ -293,15 +379,14 @@ int do_built_in_cmd(int argc, char** argv, int fd)
     } else if (0 == strncmp(argv[0], "wc", 2)) {
         wc(argc, argv, fd);
 
-    } else if (0 == strncmp(argv[0], "hello", 5)) {
-        length = snprintf(buf, bufsize, "hello from pid: %d\n", getpid());
-        write(fd, buf, length);
-
     } else {
         // this is not an internal command.
-        length = snprintf(buf, bufsize, "Sorry, I do not understand '%s' yet.\n", argv[0]);
-        write(fd, buf, length);
         rc = 1;
+    }
+
+    if (length > 0) {
+        // somebody here wanted to say something.
+        write(fd, buf, length);
     }
 
 out:

@@ -3,6 +3,7 @@
 #include <string.h>
 
 
+// --------------------------------------------------------------------------
 // tokenize the string contained in buf.  
 // iterate over string and separate it in to tokens
 // where tokens are delimited by chars from the set 'delims'
@@ -80,6 +81,7 @@ out:
 
 
 
+// --------------------------------------------------------------------------
 // given a token buffer like that produced by the tokenize() function
 // initialize the argv array of pointers with up to argc pointers to
 // tokens contained in the token buffer, buf. 
@@ -90,21 +92,37 @@ out:
 // I realize after writing and testing this function that it does essentially
 // the same thing as the agrz_extract() function in glibc although the
 // interfaces are slightly different. 
-int init_argv(char** argv, int argc, const char* buf, size_t bufsize)
+int init_argv_from_tokenbuf(char** argv, const char* buf, size_t bufsize, int count)
 {
+    int argc;
     int i;
     size_t offset;
 
-    i = 0;
+    argc = 0;
     offset = 0;
 
-    while (i < argc && offset < bufsize && buf[offset]) {
+    i = 0;
+    while (i < count && offset < bufsize && buf[offset]) {
         argv[i] = (char*)(buf + offset);
         offset = offset + strlen(argv[i]) + 1;
         ++i;
     }
     argv[i] = 0;
+    argc = i;
 
-    return i;
+    return argc;
 }
+
+// --------------------------------------------------------------------------
+void show_tokenbuf(const char* tokbuf, size_t tokbufsize)
+{
+    char c;
+    for (size_t i = 0; i<tokbufsize; ++i) {
+        c = tokbuf[i];
+        if ('\0' == c) c = ' ';
+        fprintf(stderr, "%c", c);
+    }
+    fprintf(stderr, "\n");
+}
+
 
