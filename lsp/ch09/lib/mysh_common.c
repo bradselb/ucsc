@@ -18,11 +18,36 @@
 #define CTRL_D 0x04
 
 
+
 // --------------------------------------------------------------------------
-// this function implements the interactive loop. That is, the user interacts
-// directly with this function. The function reads input from the user fd
-// and sends it to the server on the server fd. Then it waits for a reply from
-// from the server. 
+static int is_quit_cmd(const char* s);
+static int is_local_cmd(const char* s);
+static int is_putfile_cmd(const char* s);
+
+static int do_local_command(const char* tokbuf, size_t tokbufsize, int tokcount);
+static int do_remote_command(const char* tokbuf, size_t tokbufsize, int fd);
+static int do_putfile_command(const char* tokbuf, size_t tokbufsize, int destfd);
+
+static int do_builtin_cmd(int argc, char** argv, int fd);
+static int do_external_cmd(char** argv, int fd);
+
+// private functions in other files
+// these are called by do_builtin_command()
+int cat(int argc, char** argv, int fd);
+int wc(int argc, char** argv, int fd);
+int ls(int argc, char** argv, int fd);
+
+int send_putfile_messages(const char* localfilename, const char* remotefilename, int destfd);
+int writefiledata(int argc, char** argv, int fd);
+
+
+
+
+// --------------------------------------------------------------------------
+// This function implements the interactive loop. That is, the user interacts
+// directly with this function. The function reads input from stdin, tokenizes
+// the command string and conditionally, sends the tokenized command string 
+// to the server on the server fd. Then it waits for a reply from the server. 
 int do_interactive_loop(int server_fd)
 {
     char* prompt = 0;
@@ -52,6 +77,7 @@ int do_interactive_loop(int server_fd)
         }
 
         // read a line of input from the user
+        memset(buf, 0, bufsize); // so not to confuse tokenize()
         if (NULL == fgets(buf, bufsize, stdin)) {
             break;
         }
@@ -63,17 +89,18 @@ int do_interactive_loop(int server_fd)
 
 
 
-    // 
-    {
         // tokenize the command string in-place
         const char* delims = " \t\n,;:=";
-        const char* tokbuf = (const char*)buf; // convenient sugar.
         size_t tokbufsize = 0;
         int tokcount;
-        //int rc;
 
 
         tokcount = tokenize(buf, bufsize, delims, &tokbufsize);
+        const char* tokbuf = (const char*)buf; // convenient sugar.
+
+        //debug aids
+        //fprintf(stderr, "tokbufsize: %lu\n", tokbufsize);
+        //show_tokenbuf(tokbuf, tokbufsize);
 
         terminate = is_quit_cmd(tokbuf);
 
@@ -85,14 +112,8 @@ int do_interactive_loop(int server_fd)
         // send the tokenized command string to the server. 
         write(server_fd, tokbuf, tokbufsize);
 
-        if (is_putfile_cmd(tokbuf)) {
-           //rc = send_file_data(tokbuf, tokbufsize, server_fd);
-
-        } 
-    }
-
     // get response from server.
-    { // local scope -- think about refactoring this.
+    { // local scope -- pull this out as a separate function.
         int timeout;
         timeout = 10000; // milliseconds.
 
@@ -136,6 +157,13 @@ int do_interactive_loop(int server_fd)
         } // while !done
     } // end local scope
 
+
+    if (is_putfile_cmd(tokbuf)) {
+        // TODO: check return code.
+        do_putfile_command(tokbuf, tokbufsize, server_fd);
+    } 
+
+
     } // while !terminate
 
 out:
@@ -171,6 +199,9 @@ int do_non_interactive_loop(int client_fd, int log_fd)
 
         memset(buf, 0, bufsize);
         count = read(client_fd, buf, bufsize-1);
+        //fprintf(stderr, "(%s:%d) %s(), read() returned: %d [%s]\n", __FILE__, __LINE__, __FUNCTION__ , count, strerror(errno));
+
+
 
         if (0 == count) {
             // client hung-up.
@@ -182,10 +213,10 @@ int do_non_interactive_loop(int client_fd, int log_fd)
 
         // whomever ends up "doing" the command, gets to write 
         // the output back to the client. 
-        do_cmd(buf, bufsize, client_fd);
+        do_remote_command(buf, count, client_fd);
 
-        // and when that's done we send a ^D to 
-        // tell the client that we're done with this command. 
+        // and when that's done, we send a '^D' to tell
+        // the client that we're done with this command. 
         buf[0] = CTRL_D;
         write(client_fd, buf, 1);
     }
@@ -223,8 +254,9 @@ int is_putfile_cmd(const char* buf)
     return v;
 }
 
-
+#if 0
 // --------------------------------------------------------------------------
+// deprecated. no longer used.
 int parse_cmd(char* buf, char** args)
 {
     char* token;
@@ -252,6 +284,7 @@ int parse_cmd(char* buf, char** args)
 }
 
 // --------------------------------------------------------------------------
+// deprecated. no longer used.
 int do_cmd(char* buf, int bufsizey, int fd)
 {
     int rc = 0;
@@ -290,7 +323,7 @@ int do_cmd(char* buf, int bufsizey, int fd)
 done:
     return rc;
 }
-
+#endif
 
 // --------------------------------------------------------------------------
 int do_local_command(const char* tokbuf, size_t tokbufsize, int tokcount)
@@ -300,6 +333,8 @@ int do_local_command(const char* tokbuf, size_t tokbufsize, int tokcount)
     char** argv;
 
     rc = -1;
+    argc = 0;
+    argv = 0;
 
     // need at least two tokens for this to be interesting.
     if (tokcount < 2) {
@@ -337,6 +372,104 @@ out:
 
     return rc;
 }
+
+// --------------------------------------------------------------------------
+int do_remote_command(const char* tokbuf, size_t tokbufsize, int fd)
+{
+    int rc;
+    int tokcount;
+    int argc;
+    char** argv;
+
+    rc = -1;
+
+    tokcount = count_tokens(tokbuf, tokbufsize);
+
+    // need to make SURE that argv has room for null terminator.
+    argv = malloc((tokcount+1) * sizeof(char*));
+    if (!argv) {
+        rc = -1;
+        goto out;
+    }
+    memset(argv, 0, sizeof argv);
+
+    // convert tokens to argv
+    argc = init_argv_from_tokenbuf(argv, tokbuf, tokbufsize, tokcount);
+    if (argc != tokcount) {
+        // lies!
+        fprintf(stderr, "(%s:%d) %s(), argc: %d != tokcount: %d\n", __FILE__, __LINE__, __FUNCTION__, argc, tokcount);
+        rc = -1;
+        goto out;
+    }
+
+    rc = do_builtin_cmd(argc, argv, fd);
+    if (0 != rc) {
+        // this is kinda dangerous! 
+        // especially, if the client side can use put to send an arbitrary file
+        //rc = do_external_cmd(argv[0], fd);
+    }
+
+out:
+    if (argv) {
+        free(argv);
+    }
+
+    return rc;
+}
+
+// --------------------------------------------------------------------------
+// form of command in the token buffer is expected to be: 
+// put <local file path> <remote filename>
+// open local file,
+// read upto 512 bytes, encode the data bytes and send a message of the form:
+// writefiledata <remote filename> <offset> <encoded data>
+int do_putfile_command(const char* tokbuf, size_t tokbufsize, int destfd)
+{
+    int rc = 0;
+    int tokcount;
+    int argc;
+    char** argv = 0;
+
+    rc = -1;
+
+    tokcount = count_tokens(tokbuf, tokbufsize);
+
+    // need three args for this to be interesting.
+    if (tokcount < 3) {
+        fprintf(stderr, "(%s:%d) %s(), tokcount: %d < 3\n", __FILE__, __LINE__, __FUNCTION__, tokcount);
+        rc = -1;
+        goto out;
+    }
+
+    // need to make SURE that argv has room for null terminator.
+    argv = malloc((tokcount+1) * sizeof(char*));
+    if (!argv) {
+        rc = -1;
+        goto out;
+    }
+    memset(argv, 0, sizeof argv);
+
+    // convert tokens to argv
+    argc = init_argv_from_tokenbuf(argv, tokbuf, tokbufsize, tokcount);
+    if (argc != tokcount) {
+        // lies!
+        fprintf(stderr, "(%s:%d) %s(), argc: %d != tokcount: %d\n", __FILE__, __LINE__, __FUNCTION__, argc, tokcount);
+        rc = -1;
+        goto out;
+    }
+
+    rc = send_putfile_messages(argv[1], argv[2], destfd);
+    if (0 != rc) {
+    }
+
+out:
+    if (argv) {
+        free(argv);
+    }
+
+    return rc;
+}
+
 
 
 // --------------------------------------------------------------------------
@@ -378,6 +511,9 @@ int do_builtin_cmd(int argc, char** argv, int fd)
 
     } else if (0 == strncmp(argv[0], "wc", 2)) {
         wc(argc, argv, fd);
+
+    } else if (0 == strncmp(argv[0], "writefiledata", 13)) {
+        writefiledata(argc, argv, fd);
 
     } else {
         // this is not an internal command.

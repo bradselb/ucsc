@@ -113,13 +113,28 @@ int init_argv_from_tokenbuf(char** argv, const char* buf, size_t bufsize, int co
     return argc;
 }
 
+
+// --------------------------------------------------------------------------
+int count_tokens(const char* tokbuf, size_t tokbufsize)
+{
+    int count = 0;
+
+    for (size_t i = 0; i<tokbufsize; ++i) {
+        if ('\0' == tokbuf[i]) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+
 // --------------------------------------------------------------------------
 void show_tokenbuf(const char* tokbuf, size_t tokbufsize)
 {
     char c;
     for (size_t i = 0; i<tokbufsize; ++i) {
         c = tokbuf[i];
-        if ('\0' == c) c = ' ';
+        if ('\0' == c) c = '^';
         fprintf(stderr, "%c", c);
     }
     fprintf(stderr, "\n");
