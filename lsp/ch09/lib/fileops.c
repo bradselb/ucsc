@@ -1,9 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h> // malloc(), free()
 #include <string.h>
+#include <sys/types.h>
 #include <unistd.h> // open(), read(), and close()
 #include <fcntl.h> // O_RDONLY flag
+#include <errno.h>
 
+#include "mysh_common.h" // get_response_from_server()
+
+
+int decode_filedata(const char* src, void* dest, int bufsize);
 
 // --------------------------------------------------------------------------
 // given a local filename and a remote filename, generate a sequence of 
@@ -27,6 +33,7 @@ int send_putfile_messages(const char* localfilename, const char* remotefilename,
     size_t length; // how many bytes to write to destfd
     size_t offset; // where we are in the file
 
+    fprintf(stderr, "(%s:%d) %s(), local: %s, remote: %s, fd: %d\n", __FILE__, __LINE__, __FUNCTION__, localfilename, remotefilename, destfd);
 
 
     if (!localfilename  || !remotefilename) {
@@ -57,7 +64,6 @@ int send_putfile_messages(const char* localfilename, const char* remotefilename,
     // foreach block of data from the source file,
     while (0 < (rdcount = read(srcfd, rdbuf, rdbufsize))) {
         // build up a tokenized command string representing a writefiledata cmd
-        offset += rdcount;
         length = 0;
 
         length += snprintf(wrbuf+length, wrbufsize-length, "writefiledata");
@@ -78,8 +84,14 @@ int send_putfile_messages(const char* localfilename, const char* remotefilename,
         wrcount = write(destfd, wrbuf, length);
         if (wrcount < 0) {
             // an error writing...but then what? 
+            fprintf(stderr, "(%s:%d) %s(), write() returned: %ld, %s\n", __FILE__, __LINE__, __FUNCTION__, wrcount, strerror(wrcount));
+            rc = -1;
             break; // ????
         }
+
+        offset += rdcount;
+
+        get_response_from_server(destfd);
     }
 
 
@@ -115,16 +127,98 @@ out:
 // as I write this function, I'm imagining that this function is called
 // as builtin on the server side as a result of the user (on the client)
 // saying "put <local path> <remote filename>". 
-
-
 int writefiledata(int argc, char** argv, int clientfd)
 {
     int rc = 0;
+    char* buf = 0;
+    int bufsize = 1024;
+    int fd = -1;
+    const char* filename;
+    size_t offset;
+    int count;
+    
 
-    for (int i=0; i<argc; ++i) {
-        fprintf(stderr, "%s", argv[i]);
+
+    if (argc < 3) {
+        rc = -1;
+        goto out;
+    }
+
+    filename = argv[1];
+
+    errno = 0;
+    offset = strtol(argv[2], 0, 0);
+    if (errno) {
+        rc = -1;
+        goto out;
+    }
+
+    buf = malloc(bufsize);
+    if (!buf) {
+        rc = -1;
+        goto out;
+    }
+    memset(buf, 0, bufsize);
+
+    count = decode_filedata(argv[3], buf, bufsize);
+    if (count < 0) {
+        rc = -1;
+        goto out;
+    }
+
+    fd = open(filename, O_WRONLY | O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+    if (fd < 0) {
+        rc = -1;
+        goto out;
+    }
+
+    lseek(fd, offset, SEEK_SET);
+    write(fd, buf, count);
+    rc = 0;
+
+
+out:
+    if (fd > 0) {
+        close(fd);
+    }
+
+    if (buf) {
+        free(buf);
     }
 
     return rc;
+}
+
+
+// --------------------------------------------------------------------------
+int decode_filedata(const char* src, void* dest, int bufsize)
+{
+    unsigned int v;
+    unsigned char* p = (unsigned char*)dest;
+    const char* q = src;
+    int count = 0;
+    char buf[4];
+
+    memset(buf, 0, sizeof buf);
+
+    if (!src || !dest) {
+        goto out;
+    }
+
+    while (count < bufsize && *q && *(q+1)) {
+        v = 0;
+
+        *buf = *q++ ; 
+         v = 16 * strtol(buf, 0, 16);
+        *buf = *q++ ;
+         v += strtol(buf, 0, 16);
+
+        *p++ = (v & 0x0ff);
+
+        ++count;
+    }
+
+out:
+    return count;
 }
 

@@ -11,6 +11,7 @@
 
 #include "mysh_common.h"
 #include "tokenize.h"
+#include "fileops.h"
 
 #define MAX_ARGC 1024
 #define MYSH_PROMPT "mysh> "
@@ -37,8 +38,6 @@ int cat(int argc, char** argv, int fd);
 int wc(int argc, char** argv, int fd);
 int ls(int argc, char** argv, int fd);
 
-int send_putfile_messages(const char* localfilename, const char* remotefilename, int destfd);
-int writefiledata(int argc, char** argv, int fd);
 
 
 
@@ -99,7 +98,7 @@ int do_interactive_loop(int server_fd)
         const char* tokbuf = (const char*)buf; // convenient sugar.
 
         //debug aids
-        //fprintf(stderr, "tokbufsize: %lu\n", tokbufsize);
+        //fprintf(stderr, "\tokbufsize: %lu\n", tokbufsize);
         //show_tokenbuf(tokbuf, tokbufsize);
 
         terminate = is_quit_cmd(tokbuf);
@@ -109,59 +108,15 @@ int do_interactive_loop(int server_fd)
             continue;
         }
 
+
         // send the tokenized command string to the server. 
         write(server_fd, tokbuf, tokbufsize);
+        get_response_from_server(server_fd);
 
-    // get response from server.
-    { // local scope -- pull this out as a separate function.
-        int timeout;
-        timeout = 10000; // milliseconds.
-
-        struct pollfd ps;
-        ps.fd = server_fd;
-        ps.events = POLLIN;
-        ps.revents = 0;
-
-        int done;
-        done = 0;
-        while (!done) {
-            int poll_rc;
-
-            // see if the server has something to say.
-            poll_rc = poll(&ps, 1, timeout);
-
-            if (0 == poll_rc) {
-                // timed out.
-                fprintf(stderr, "(%s:%d) %s(), poll() timeout [%s]\n", __FILE__, __LINE__, __FUNCTION__ , strerror(errno));
-                done = 1;
-            } else if (poll_rc < 0) {
-                // an error.
-                fprintf(stderr, "(%s:%d) %s(), poll() returned: %d [%s]\n", __FILE__, __LINE__, __FUNCTION__ , poll_rc, strerror(errno));
-                done = 1;
-            } else {
-                ssize_t rc;
-                
-                // get the response from server
-                memset(buf, 0, bufsize);
-                rc = read(server_fd, buf, bufsize-1);
-                if (rc > 0) {
-                    fprintf(stdout, "%s", buf);
-                    if (CTRL_D == buf[rc-1]) {
-                        done = 1;
-                    }
-                } else {
-                    fprintf(stderr, "(%s:%d) %s(), read() returned: %d [%s]\n", __FILE__, __LINE__, __FUNCTION__ , poll_rc, strerror(errno));
-                    done = 1;
-                }
-            } 
-        } // while !done
-    } // end local scope
-
-
-    if (is_putfile_cmd(tokbuf)) {
-        // TODO: check return code.
-        do_putfile_command(tokbuf, tokbufsize, server_fd);
-    } 
+        if (is_putfile_cmd(tokbuf)) {
+            // TODO: check return code.
+            do_putfile_command(tokbuf, tokbufsize, server_fd);
+        } 
 
 
     } // while !terminate
@@ -229,6 +184,75 @@ out:
 
     return 0;
 }
+
+
+// --------------------------------------------------------------------------
+int get_response_from_server(int server_fd)
+{
+    int rc = 0;
+    int timeout;
+    timeout = 10000; // milliseconds.
+
+    struct pollfd ps;
+    ps.fd = server_fd;
+    ps.events = POLLIN;
+    ps.revents = 0;
+
+    char* buf;
+    int bufsize;
+
+
+    // allocate an input buffer.
+    bufsize = MYSH_BUFFER_SIZE ;
+    buf = malloc(bufsize);
+    if (!buf) {
+        rc = -1;
+        goto out;
+    }
+
+    int done;
+    done = 0;
+    while (!done) {
+        int poll_rc;
+
+        // see if the server has something to say.
+        poll_rc = poll(&ps, 1, timeout);
+
+        if (0 == poll_rc) {
+            // timed out.
+            fprintf(stderr, "(%s:%d) %s(), poll() timeout [%s]\n", __FILE__, __LINE__, __FUNCTION__ , strerror(errno));
+            done = 1;
+        } else if (poll_rc < 0) {
+            // an error.
+            fprintf(stderr, "(%s:%d) %s(), poll() returned: %d [%s]\n", __FILE__, __LINE__, __FUNCTION__ , poll_rc, strerror(errno));
+            done = 1;
+        } else {
+            ssize_t rc;
+            
+            // get the response from server
+            memset(buf, 0, bufsize);
+            rc = read(server_fd, buf, bufsize-1);
+            if (rc > 0) {
+                fprintf(stdout, "%s", buf);
+                if (CTRL_D == buf[rc-1]) {
+                    rc = 0; // sucess.
+                    done = 1;
+                }
+            } else {
+                fprintf(stderr, "(%s:%d) %s(), read() returned: %d [%s]\n", __FILE__, __LINE__, __FUNCTION__ , poll_rc, strerror(errno));
+                done = 1;
+            }
+        } 
+    } // while !done
+
+out:
+    if(buf) {
+        free(buf);
+    }
+    return rc;
+}
+
+
 
 // --------------------------------------------------------------------------
 int is_quit_cmd(const char* buf)
@@ -403,11 +427,6 @@ int do_remote_command(const char* tokbuf, size_t tokbufsize, int fd)
     }
 
     rc = do_builtin_cmd(argc, argv, fd);
-    if (0 != rc) {
-        // this is kinda dangerous! 
-        // especially, if the client side can use put to send an arbitrary file
-        //rc = do_external_cmd(argv[0], fd);
-    }
 
 out:
     if (argv) {
@@ -433,6 +452,7 @@ int do_putfile_command(const char* tokbuf, size_t tokbufsize, int destfd)
     rc = -1;
 
     tokcount = count_tokens(tokbuf, tokbufsize);
+    //fprintf(stderr, "(%s:%d) %s(), tokcount: %d\n", __FILE__, __LINE__, __FUNCTION__, tokcount);
 
     // need three args for this to be interesting.
     if (tokcount < 3) {
@@ -482,7 +502,7 @@ int do_builtin_cmd(int argc, char** argv, int fd)
     int bufsize = 512;
     int length;
 
-    // a small buffer for a reply message - if necessay. 
+    // a small buffer for a reply message - if necessary. 
     buf = malloc(bufsize);
     if (!buf) {
         rc = -1;
