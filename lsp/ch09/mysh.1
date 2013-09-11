@@ -58,10 +58,30 @@ for example:
 .I local 
 uptime
 
-would report the uptime for the local host.
+.SH FILE TRANSFER COMMANDS
+mysh can transfer files with the 
+.B put
+and 
+.B get 
+commands. The put command copies a local file to the remote host and the get command copies a file from the remote host to the local host. The format of these commands is as follows:
 
-.SH BUGS
-.IP "Please report bugs to the Author."
+.B put
+.I local-file-spec remote-file-spec
+
+.B get
+.I remote-file-spec local-file-spec
+
+
+.SH KNOWN BUGS
+The 
+.B get
+file transfer command is not yet implemented.
+
+The 
+.B put
+command is known to be some what un-reliable for large files. 
+
+.IP "Please report any other bugs to the author."
 
 .SH AUTHOR
 .IP "Brad Selbrede, brad.selbrede@yahoo.com"
