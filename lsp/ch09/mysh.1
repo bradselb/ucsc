@@ -1,0 +1,23 @@
+.TH MYSH 1 "September 2013" "ver 1.1"
+
+.SH NAME
+.IP "mysh - my shell"
+.SH COPYRIGHT
+.IP "mysh is Copyright (C) 2013, Brad Selbrede. All rights reserved."
+.SH SYNOPSIS
+.IP mysh
+.SH DESCRIPTION
+.IP "mysh is a very simple unix remote shell client-server application. In a sense, the application behaves as one would expect a very primative unix shell program to behave. 
+the application consists of two executables - a client and a server. The client connects to the server in the usual manner and once connected, the client may send commands to the server. The commands are executed on the server and the results sent back to the client. Since the no user authentication is performed, the set of commands that can be performed on the remote server is limited to a smallset. At present only the cd, ls, cat, wc and hello commands are allowed. One may also do simple file transfer in either direction with put and get commands. 
+The application also allows the user to submit commands for execution on the local host (the host where the client program is running) by simplty preceeding the command with the keyword 'local'. The set of local commands is not limited - that is, any command that the user can run in a normal shell the user can run in the client as a local command.
+.SH BUILTINS
+.IP "mysh handles cat, ls and wc commands with built-in functions. The implementation of these standard utilities is considerably simplified compared to the standard versions."
+.IP "ls accepts the -l command line option and lists the directory"
+.IP "cat accepts the -l command line option and prints the content of files to the standard output stream. If the -l option is used, each line of output is preceed by a line number."
+.IP "wc counts the lines, words and characters in the file named on the command line." 
+.SH BUGS
+.IP "Please report bugs to the Author."
+.SH AUTHOR
+.IP "Brad Selbrede"
+.SH "SEE ALSO"
+.IP bash(1)
