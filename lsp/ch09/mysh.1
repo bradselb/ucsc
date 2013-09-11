@@ -2,22 +2,69 @@
 
 .SH NAME
 .IP "mysh - my shell"
+
 .SH COPYRIGHT
 .IP "mysh is Copyright (C) 2013, Brad Selbrede. All rights reserved."
+
 .SH SYNOPSIS
-.IP mysh
+.B server [-a | --host
+.I ip-address
+.B ] [-p | --port 
+.I port-number]
+
+.B client [-a | --host
+.I ip-address
+.B ] [-p | --port 
+.I port-number]
+
 .SH DESCRIPTION
-.IP "mysh is a very simple unix remote shell client-server application. In a sense, the application behaves as one would expect a very primative unix shell program to behave. 
-the application consists of two executables - a client and a server. The client connects to the server in the usual manner and once connected, the client may send commands to the server. The commands are executed on the server and the results sent back to the client. Since the no user authentication is performed, the set of commands that can be performed on the remote server is limited to a smallset. At present only the cd, ls, cat, wc and hello commands are allowed. One may also do simple file transfer in either direction with put and get commands. 
-The application also allows the user to submit commands for execution on the local host (the host where the client program is running) by simplty preceeding the command with the keyword 'local'. The set of local commands is not limited - that is, any command that the user can run in a normal shell the user can run in the client as a local command.
-.SH BUILTINS
-.IP "mysh handles cat, ls and wc commands with built-in functions. The implementation of these standard utilities is considerably simplified compared to the standard versions."
-.IP "ls accepts the -l command line option and lists the directory"
-.IP "cat accepts the -l command line option and prints the content of files to the standard output stream. If the -l option is used, each line of output is preceed by a line number."
-.IP "wc counts the lines, words and characters in the file named on the command line." 
+.IP "mysh is a very simple unix remote shell client-server application. In a sense, the application behaves as one would expect a very primative unix shell program to behave with the notable exception that, by default, the commands entered by the user are performed by the server and that server maybe running on a remote host. The application consists of two executables - a client and a server. The client connects to the server in the usual manner and once connected, the client may send commands to the server. The commands are executed on the server and the results sent back to the client. Since no user authentication is performed, the set of commands that can be performed on the remote server is extremely limited. At present only the the following remote commands are allowed: cd, ls, cat, wc and hello. One may also do simple file transfer in either direction with put and get commands. File transfers are a little buggy at this time but seem to work reasonbly well for small, plain text files. Files are encoded to plain ascii before transmission and decoded upon receict so, even binary files could, in theroery, be transferred. The application also allows the user to submit commands for execution on the local host (the host where the client program is running) by simply preceeding the command with the keyword 'local'. The set of local commands is not limited - that is, any command that the user can run in a normal shell the user can run in the client as a local command."
+
+.SH OPTIONS
+.IP "both client and server accept the following commadn line options"
+.IP "-a | --host-name | --ip-address <ip-address | host-name>"
+tell the client where to find the server and tells the server which interface to use to listen for incomming connections from clients. By default, the client will try to connect to a server on localhost and the server will listen for incomming connections on any available interface.  
+te that the argument may be specified in either doted-decimal notation (e.g. 192.168.1.218) or as a hostname like 'mysh.mydomain.com' or 'localhost' or 'fred'. The usual domain name resolution apparatus is applied. 
+
+.IP "-p | --port-number <port-number>"
+Tell the server what port to use for its service and tell the client what port to look for the server. By default, both client and server will use an ephmeral port number chosen by the kernel. While this might be suitable for the server (to use a port number chose by the kerenl, it is necessary always for the client to specify the exact same port number that the server is using.
+
+.SH REMOTE COMMANDS
+mysh handles
+.B cd, cat, ls, hello 
+and 
+.B wc 
+commands with built-in functions on the remote host. The implementation of these standard utilities is considerably simplified compared to the standard versions.
+
+.B cat 
+prints the content of files to the standard output stream.
+
+.B cd 
+changes the current working directory
+
+.B ls 
+accepts the -l command line option and lists the directory
+
+.B hello 
+simply prints out a friendy greeting. The greeting includes th ePID of the server process.
+
+.B wc 
+counts the lines, words and characters in the file named on the command line.
+
+.SH LOCAL COMMANDS
+.IP "The user may also execute commands on the local host by simply preceeding the command by the key word 'local'"
+for example: 
+.B mysh> 
+.I local 
+uptime
+
+would report the uptime for the local host.
+
 .SH BUGS
 .IP "Please report bugs to the Author."
+
 .SH AUTHOR
-.IP "Brad Selbrede"
+.IP "Brad Selbrede, brad.selbrede@yahoo.com"
+
 .SH "SEE ALSO"
 .IP bash(1)
