@@ -7,6 +7,7 @@
 #include <errno.h>
 
 #include "mysh_common.h" // get_response_from_server()
+//#include "tokenize.h" // show_tokenbuf()  - for debugging only
 
 
 int decode_filedata(const char* src, void* dest, int bufsize);
@@ -23,7 +24,7 @@ int send_putfile_messages(const char* localfilename, const char* remotefilename,
 {
     int rc;
     int srcfd = -1; // the local file.
-    char* rdbuf = 0;
+    unsigned char* rdbuf = 0;
     unsigned int rdbufsize = 512;
     ssize_t rdcount; // how many bytes were read from file.
     char* wrbuf = 0;
@@ -33,8 +34,8 @@ int send_putfile_messages(const char* localfilename, const char* remotefilename,
     size_t length; // how many bytes to write to destfd
     size_t offset; // where we are in the file
 
-    fprintf(stderr, "(%s:%d) %s(), local: %s, remote: %s, fd: %d\n", __FILE__, __LINE__, __FUNCTION__, localfilename, remotefilename, destfd);
 
+    //fprintf(stderr, "(%s:%d) %s(), local: %s, remote: %s, fd: %d\n", __FILE__, __LINE__, __FUNCTION__, localfilename, remotefilename, destfd);
 
     if (!localfilename  || !remotefilename) {
         rc = -1;
@@ -79,6 +80,7 @@ int send_putfile_messages(const char* localfilename, const char* remotefilename,
             length += snprintf(wrbuf+length, wrbufsize-length, "%02x", rdbuf[i]);
         }
         wrbuf[length++] = 0;
+
 
         // send the tokenized command string to the destination fd
         wrcount = write(destfd, wrbuf, length);
@@ -130,12 +132,13 @@ out:
 int writefiledata(int argc, char** argv, int clientfd)
 {
     int rc = 0;
-    char* buf = 0;
-    int bufsize = 1024;
-    int fd = -1;
     const char* filename;
     size_t offset;
-    int count;
+    const char* encoded_data_buf = 0;
+    char* decoded_data_buf = 0;
+    int decoded_data_bufsize = 1024;
+    int decoded_byte_count;
+    int fd = -1;
     
 
 
@@ -153,15 +156,17 @@ int writefiledata(int argc, char** argv, int clientfd)
         goto out;
     }
 
-    buf = malloc(bufsize);
-    if (!buf) {
+    encoded_data_buf = argv[3];
+
+    decoded_data_buf = malloc(decoded_data_bufsize);
+    if (!decoded_data_buf) {
         rc = -1;
         goto out;
     }
-    memset(buf, 0, bufsize);
+    memset(decoded_data_buf, 0, decoded_data_bufsize);
 
-    count = decode_filedata(argv[3], buf, bufsize);
-    if (count < 0) {
+    decoded_byte_count = decode_filedata(encoded_data_buf, decoded_data_buf, decoded_data_bufsize);
+    if (decoded_byte_count < 0) {
         rc = -1;
         goto out;
     }
@@ -173,7 +178,7 @@ int writefiledata(int argc, char** argv, int clientfd)
     }
 
     lseek(fd, offset, SEEK_SET);
-    write(fd, buf, count);
+    write(fd, decoded_data_buf, decoded_byte_count);
     rc = 0;
 
 
@@ -182,8 +187,9 @@ out:
         close(fd);
     }
 
-    if (buf) {
-        free(buf);
+    if (decoded_data_buf) {
+        memset(decoded_data_buf, 0, decoded_data_bufsize);
+        free(decoded_data_buf);
     }
 
     return rc;
@@ -202,16 +208,21 @@ int decode_filedata(const char* src, void* dest, int bufsize)
     memset(buf, 0, sizeof buf);
 
     if (!src || !dest) {
+        count = -1;
         goto out;
     }
 
     while (count < bufsize && *q && *(q+1)) {
         v = 0;
 
-        *buf = *q++ ; 
-         v = 16 * strtol(buf, 0, 16);
-        *buf = *q++ ;
-         v += strtol(buf, 0, 16);
+        buf[0] = *q++ ; 
+        buf[1] = *q++ ;
+        buf[2] = 0;
+        buf[3] = 0;
+
+        
+        
+        v = strtol(buf, 0, 16);
 
         *p++ = (v & 0x0ff);
 

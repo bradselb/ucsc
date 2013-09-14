@@ -18,7 +18,7 @@
 .I port-number]
 
 .SH DESCRIPTION
-.IP "mysh is a very simple unix remote shell client-server application. In a sense, the application behaves as one would expect a very primative unix shell program to behave with the notable exception that, by default, the commands entered by the user are performed by the server and that server maybe running on a remote host. The application consists of two executables - a client and a server. The client connects to the server in the usual manner and once connected, the client may send commands to the server. The commands are executed on the server and the results sent back to the client. Since no user authentication is performed, the set of commands that can be performed on the remote server is extremely limited. At present only the the following remote commands are allowed: cd, ls, cat, wc and hello. One may also do simple file transfer in either direction with put and get commands. File transfers are a little buggy at this time but seem to work reasonbly well for small, plain text files. Files are encoded to plain ascii before transmission and decoded upon receict so, even binary files could, in theroery, be transferred. The application also allows the user to submit commands for execution on the local host (the host where the client program is running) by simply preceeding the command with the keyword 'local'. The set of local commands is not limited - that is, any command that the user can run in a normal shell the user can run in the client as a local command."
+.IP "mysh is a very simple unix remote shell client-server application. In a sense, the application behaves as one would expect a very primative unix shell program to behave with the notable exception that, by default, the commands entered by the user are performed by the server and that server maybe running on a remote host. The application consists of two executables - a client and a server. The client connects to the server in the usual manner and once connected, the client may send commands to the server. The commands are executed on the server and the results sent back to the client. Since no user authentication is performed, the set of commands that can be performed on the remote server is extremely limited. At present only the the following remote commands are allowed: cd, ls, cat, wc and hello. One may also do simple file transfer in either direction with put and get commands. Files are encoded to plain ascii before transmission and decoded upon receict so, even binary files can be transferred. The application also allows the user to submit commands for execution on the local host (the host where the client program is running) by simply preceeding the command with the keyword 'local'. The set of local commands is not limited - that is, any command that the user can run in a normal shell the user can run in the client as a local command."
 
 .SH OPTIONS
 .IP "both client and server accept the following commadn line options"
@@ -77,9 +77,6 @@ The
 .B get
 file transfer command is not yet implemented.
 
-The 
-.B put
-command is known to be some what un-reliable for large files. 
 
 .IP "Please report any other bugs to the author."
 

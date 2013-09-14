@@ -511,6 +511,14 @@ int do_builtin_cmd(int argc, char** argv, int fd)
     memset(buf, 0, bufsize);
 
 
+    // show the args that we've received. helps with debug.
+    //for(int i=0; i<argc; ++i) {
+    //    fprintf(stderr, "%s ", argv[i]);
+    //}
+    //fprintf(stderr, "\n");
+
+
+
     rc = 0;
     length = 0;
     if (is_quit_cmd(argv[0])) {
@@ -531,6 +539,11 @@ int do_builtin_cmd(int argc, char** argv, int fd)
 
     } else if (0 == strncmp(argv[0], "wc", 2)) {
         wc(argc, argv, fd);
+
+    } else if (0 == strncmp(argv[0], "put", 3) && 3 == argc) {
+        // remove existing file. 
+        // TODO: be less drastic. 
+        unlink(argv[2]);
 
     } else if (0 == strncmp(argv[0], "writefiledata", 13)) {
         writefiledata(argc, argv, fd);
