@@ -1,8 +1,8 @@
-This directory contains the work that I have done or am doing for the 
+This directory contains the work that I have done for the 
 Advanced Linux Device Drivers course offered by UC Santa Cruz extension
 in Santa Clara. I took this course Winter term, 2013. 
 
 The sub-directories A1, A2 and A3 relate to homework assignments and the
-rtl8139 subdirectory contains work I am doing for a project relating to
-the RealTek RTL8139 ethernet chip (see README in that directory).
+rtl8139 subdirectory contains work that I did for the project - a kernel 
+module device driver for the RealTek RTL8139 ethernet chip.
 
